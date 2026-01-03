@@ -146,16 +146,11 @@ class CNCGenerator:
     def __init__(self, parser, manual_offset=None):
         self.parser = parser
         self.commands = []
-
-        # State tracking
         self.current_x = None
         self.current_y = None
         self.head_down = False
         self.active_tool_mode = None  # 1 = Single, 3 = Dual
-
-        # Calculate Offset from 'SEPARAR' (Yellow) layer or use default
         self.head_offset = self.calculate_offset_from_separar(manual_offset)
-
         base = os.path.basename(parser.filepath)
         self.prog_name = os.path.splitext(base)[0].upper()
 
@@ -224,6 +219,7 @@ class CNCGenerator:
                 self.add_cmd(";")
                 self.add_cmd("CALL ELY")
                 self.add_cmd("CALL DW11")
+                self.add_cmd("FREEZE")
 
             self.active_tool_mode = 1
 
@@ -251,6 +247,7 @@ class CNCGenerator:
                 self.add_cmd("CALL DW13")
             else:
                 self.add_cmd("CALL DW11")
+                self.add_cmd("FREEZE")
             self.head_down = True
 
         coords = self.format_coord_string(x, y)
@@ -259,19 +256,18 @@ class CNCGenerator:
         self.current_y = y
 
     def move_arc(self, end_x, end_y, angle):
+        """Generates raw ARC command without individual FREEZE/SYNC."""
         if not self.head_down:
             if self.active_tool_mode == 3:
                 self.add_cmd("CALL DW13")
             else:
                 self.add_cmd("CALL DW11")
+                self.add_cmd("FREEZE")
             self.head_down = True
 
-        a_str = f"{angle:.2f}".rstrip('0').rstrip('.')
-
-        self.add_cmd("FREEZE")
+        # Dueffe uses high precision for angles
+        a_str = f"{angle:.3f}".rstrip('0').rstrip('.')
         self.add_cmd(f"ARC X{end_x}Y{end_y} a={a_str}")
-        self.add_cmd("SYNC")
-
         self.current_x = end_x
         self.current_y = end_y
 
@@ -291,75 +287,77 @@ class CNCGenerator:
         return math.degrees(span_se) if is_ccw else -math.degrees((2 * math.pi) - span_se)
 
     def generate(self):
-        # Header
-        self.add_cmd("BLOCK VA1\nVELL 166.67\nACCL 333.33\nw195=1\nENDBL")
+        # 1. UPDATED PERFORMANCE BLOCK
+        self.add_cmd("BLOCK VA1\nVELL 200\nACCL 600\nw195=1\nENDBL")
         self.add_cmd("BLOCK VA2\nVELL 133.33\nACCL 166.67\nw195=2\nENDBL")
         self.add_cmd("BLOCK VA3\nVELL 100\nACCL 133.33\nw195=3\nENDBL")
         self.add_cmd(";")
         self.add_cmd(f"PROGRAM LAV1\n; DISEGNO: {self.prog_name}")
         self.add_cmd("ABS X=0\nABS Y=0\nCORNER a=333.33")
         self.add_cmd("VEL X= 80\nVEL Y= 80\nACC X= 30\nACC Y= 30")
-        self.add_cmd("v990=1\nv991=1\nCALL INIZIO")
+
+        # 2. UPDATED VARIABLE
+        self.add_cmd("v990=0\nv991=1\nCALL INIZIO")
         self.add_cmd("LABEL 1\nCALL INLAV1\nCALL VA1")
 
-        # Start logic (Safety QLY)
-        self.add_cmd("CALL FLZ")
-        self.add_cmd("CALL QLY 150")  # Safety
-        self.add_cmd("MR X0Y150")
-        self.add_cmd(";")
+        # 3. UPDATED INITIAL POSITIONING
+        # Using the first entity's Y for QLY to match Dueffe logic
+        first_ent = next((e for e in self.parser.entities if self.get_role(e) != "SKIP"), None)
+        start_y = 1539.86  # Default fallback
+        if first_ent:
+            _, start_y = self.transform(first_ent.start[0] if isinstance(first_ent, DC2Arc) else first_ent.points[0][0],
+                                        first_ent.start[1] if isinstance(first_ent, DC2Arc) else first_ent.points[0][1])
+
+        self.add_cmd(f"CALL QLY {start_y}")
 
         first_move = True
+        in_arc_sequence = False
 
         for ent in self.parser.entities:
-            # Check Role
             role = self.get_role(ent)
-            if role == "SKIP":
-                continue
+            if role == "SKIP": continue
 
-            # Determine Mode based on Role
             target_mode = 3 if role == "DUAL" else 1
-
-            # Determine geometry type
             is_arc = isinstance(ent, DC2Arc)
 
-            # Determine start point for moves
-            if is_arc:
-                raw_start = ent.start
-            else:
-                raw_start = ent.points[0]
+            # --- Handle FREEZE/SYNC for Arcs ---
+            if is_arc and not in_arc_sequence:
+                self.add_cmd("FREEZE")
+                in_arc_sequence = True
+            elif not is_arc and in_arc_sequence:
+                self.add_cmd("SYNC")
+                in_arc_sequence = False
 
+            raw_start = ent.start if is_arc else ent.points[0]
             sx, sy = self.transform(raw_start[0], raw_start[1])
 
-            # --- Tool Change / Setup Logic ---
             if target_mode != self.active_tool_mode:
-                # Force pen up before switching modes
                 if self.head_down:
                     self.add_cmd("CALL UP1")
                     self.head_down = False
-
                 self.set_tool_mode(target_mode, sy)
-                first_move = False  # set_tool_mode handles the initial move
+                first_move = False
 
-            # --- Movement Logic ---
             if first_move:
                 self.move_rapid(sx, sy)
                 first_move = False
             else:
-                # Only move if significant distance
                 dist = math.sqrt((sx - (self.current_x or 0)) ** 2 + (sy - (self.current_y or 0)) ** 2)
-                if dist > 1.0:
+                if dist > 0.05:  # Tighter tolerance
                     self.move_rapid(sx, sy)
 
-            # --- Cutting Logic ---
             if is_arc:
                 ex, ey = self.transform(ent.end[0], ent.end[1])
                 angle = self.calculate_arc_angle(ent.center, ent.start, ent.end, ent.control)
                 self.move_arc(ex, ey, angle)
             else:
-                # Line
                 for p in ent.points[1:]:
                     px, py = self.transform(p[0], p[1])
                     self.move_cut(px, py)
+
+        # Close final arc sequence if it was left open
+        if in_arc_sequence:
+            self.add_cmd("SYNC")
 
         # Footer
         if self.head_down:

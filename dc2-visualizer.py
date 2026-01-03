@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import Slider
 from matplotlib.lines import Line2D
+import matplotlib
+matplotlib.use('macosx')
 
 
 def norm(a):
@@ -331,7 +333,6 @@ class DC2Visualizer:
 # Main execution
 if __name__ == "__main__":
     visualizer = DC2Visualizer(R"drawing.dc2")
-    # visualizer = DC2Visualizer(R"standard.dc2")
 
     print("\nGenerating interactive visualization...")
     visualizer.visualize_interactive()

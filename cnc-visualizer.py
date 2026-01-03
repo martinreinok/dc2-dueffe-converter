@@ -4,6 +4,8 @@ from matplotlib.widgets import Slider
 import re
 import sys
 
+import matplotlib
+matplotlib.use('macosx')
 
 class CNCVisualizer:
     """
@@ -54,6 +56,8 @@ class CNCVisualizer:
 
             # Detect command type
             if line.startswith('MR '):
+                cmd_data['type'] = 'MR'
+            elif line.startswith('MOVI '):
                 cmd_data['type'] = 'MR'
             elif line.startswith('MI '):
                 cmd_data['type'] = 'MI'
@@ -274,58 +278,73 @@ class CNCVisualizer:
         slider = Slider(ax_slider, 'Progress', 0, len(self.segments), valinit=len(self.segments), valstep=1)
 
         def update(val):
+            # 1. Capture current limits before clearing the plot
+            # We check if the plot has been initialized by looking at the current limits
+            cur_xmin, cur_xmax = ax.get_xlim()
+            cur_ymin, cur_ymax = ax.get_ylim()
+
+            # If the limits are the default (0,1), use the class defaults instead
+            if cur_xmin == 0.0 and cur_xmax == 1.0:
+                cur_xmin, cur_xmax = self.xmin, self.xmax
+                cur_ymin, cur_ymax = self.ymin, self.ymax
+
             step = int(slider.val)
-            ax.cla()  # Clear axis
+            ax.cla()  # Clear axis (this resets limits to 0, 1)
+
+            # 2. Re-apply the captured limits (preserving your zoom)
+            ax.set_xlim(cur_xmin, cur_xmax)
+            ax.set_ylim(cur_ymin, cur_ymax)
 
             # Reset view properties
             ax.set_aspect('equal')
             ax.grid(True, alpha=0.3)
-            ax.set_xlim(self.xmin, self.xmax)
-            ax.set_ylim(self.ymin, self.ymax)
             ax.set_xlabel("X (mm)")
             ax.set_ylabel("Y (mm)")
-            ax.set_title(f"CNC Visualizer - {self.filename} (Step {step}/{len(self.segments)})")
 
-            # Batch drawing for performance
-            # Separate lists for Jump, Head1 Cut, Head2 Cut
-            jump_xs, jump_ys = [], []
-            h1_xs, h1_ys = [], []
-            h2_xs, h2_ys = [], []
-
-            # We draw simulation up to 'step'
-            # To preserve colors per segment if needed, we iterate.
-            # But simple visualization usually needs: Blue Dotted (Jump), Black (Head 1), Green (Head 2)
-
+            # --- Draw Segments ---
             for i in range(step):
                 seg = self.segments[i]
-
-                # Head 1
                 if seg['head1_coords']:
-                    pts = seg['head1_coords']
-                    xs, ys = zip(*pts)
+                    xs, ys = zip(*seg['head1_coords'])
                     if seg['style'] == 'jump':
                         ax.plot(xs, ys, ':', color='blue', alpha=0.4, linewidth=1)
                     else:
                         ax.plot(xs, ys, '-', color='black', alpha=0.8, linewidth=1.5)
 
-                # Head 2
                 if seg['head2_coords']:
-                    pts2 = seg['head2_coords']
-                    xs2, ys2 = zip(*pts2)
+                    xs2, ys2 = zip(*seg['head2_coords'])
                     ax.plot(xs2, ys2, '-', color='limegreen', alpha=0.6, linewidth=1.5)
 
-            # Draw "Machine Head" position marker at the end of the last segment
+            # --- Coordinates Display Logic ---
+            status_text = "Machine Home"
+            command_text = "Command: N/A"
             if step > 0:
                 last = self.segments[step - 1]
-                if last['head1_coords']:
-                    lx, ly = last['head1_coords'][-1]
-                    ax.plot(lx, ly, 'o', color='black', markersize=8, label='Head 1', zorder=10)
+                h1_pos = last['head1_coords'][-1]
+                ax.plot(h1_pos[0], h1_pos[1], 'o', color='black', markersize=8, zorder=10)
+                status_text = f"H1: X={h1_pos[0]:.2f}, Y={h1_pos[1]:.2f}"
 
-                    if last['head2_coords']:
-                        lx2, ly2 = last['head2_coords'][-1]
-                        ax.plot(lx2, ly2, 'o', color='limegreen', markersize=8, label='Head 2', zorder=10)
+                # GET RAW COMMAND TEXT
+                command_text = f"Code: {last['description']}"
 
-            # Add Legend
+                if last['head2_coords']:
+                    h2_pos = last['head2_coords'][-1]
+                    ax.plot(h2_pos[0], h2_pos[1], 'o', color='limegreen', markersize=8, zorder=10)
+                    status_text += f"\nH2: X={h2_pos[0]:.2f}, Y={h2_pos[1]:.2f}"
+                else:
+                    status_text += "\nH2: Inactive"
+
+                # Position Display (Top Left)
+            ax.text(0.02, 0.98, status_text, transform=ax.transAxes,
+                    verticalalignment='top', family='monospace',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+            # --- NEW: CNC COMMAND DISPLAY (Bottom Left) ---
+            ax.text(0.02, 0.02, command_text, transform=ax.transAxes,
+                    verticalalignment='bottom', family='monospace', fontsize=10,
+                    color='darkred', weight='bold',
+                    bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.5))
+
             from matplotlib.lines import Line2D
             custom_lines = [
                 Line2D([0], [0], color='black', lw=2),
@@ -337,8 +356,6 @@ class CNCVisualizer:
             fig.canvas.draw_idle()
 
         slider.on_changed(update)
-
-        # Trigger initial update
         update(len(self.segments))
         plt.show()
 
