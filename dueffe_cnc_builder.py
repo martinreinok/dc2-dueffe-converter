@@ -128,11 +128,15 @@ ENDPR
 """
 
 
-def rectangle(state: MachineState, start: SingleHeadCoordinates, width: float, height: float, overlap_mm: float = 40) -> str:
+def rectangle(state: MachineState, start: SingleHeadCoordinates, width: float, height: float, overlap_mm: float = 40, start_offset_y = 0) -> str:
     x = start.x
     y = start.y
     w = width
     h = height
+
+    if start_offset_y != 0:
+        start = SingleHeadCoordinates(start.x, start.y + start_offset_y)
+        overlap_mm = overlap_mm + start_offset_y
 
     lines: List[str] = []
     lines.append(mr_move_head(start))
@@ -161,12 +165,16 @@ def rectangle(state: MachineState, start: SingleHeadCoordinates, width: float, h
     return "\n".join(lines)
 
 
-def rectangle_dual(state: MachineState,start: DualHeadCoordinates,width: float,height: float,overlap_mm: float = 40) -> str:
+def rectangle_dual(state: MachineState,start: DualHeadCoordinates,width: float,height: float,overlap_mm: float = 40, start_offset_y = 0) -> str:
     x = start.x
     y = start.y
     z = start.z
     w = width
     h = height
+
+    if start_offset_y != 0:
+        start = DualHeadCoordinates(start.x, start.y + start_offset_y, start.z + start_offset_y)
+        overlap_mm = overlap_mm + start_offset_y
 
     lines: List[str] = []
     lines.append(f"CALL QLYZ {fmt(y)} {fmt(z)}")

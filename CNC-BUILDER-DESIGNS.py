@@ -22,6 +22,7 @@ from dueffe_cnc_builder import (
     emit_program,
     save_program,
 )
+# from dxf_to_cnc import dxf_to_cnc_single
 import dueffe_cnc_visualizer
 from dueffe_cnc_visualizer import show_interactive
 
@@ -147,6 +148,7 @@ class RectSpec:
     start: Tuple[float, float]
     width: float
     height: float
+    start_offset_y: float = 0
     overlap_mm: float = 40
     dual: bool = False
 
@@ -207,6 +209,7 @@ def build_bed_program(spec: BedSpec) -> List[str]:
                     start=D(r.start[0], r.start[1]),
                     width=r.width,
                     height=r.height,
+                    start_offset_y=r.start_offset_y,
                     overlap_mm=r.overlap_mm,
                 )
             )
@@ -217,6 +220,7 @@ def build_bed_program(spec: BedSpec) -> List[str]:
                     start=SingleHeadCoordinates(*r.start),
                     width=r.width,
                     height=r.height,
+                    start_offset_y=r.start_offset_y,
                     overlap_mm=r.overlap_mm,
                 )
             )
@@ -319,350 +323,175 @@ def SLEEPWELL_STRIPES_140(version = "V2"):
     program_lines.append(end_block())
     return program_lines, name
 
-def ESPA_160X190(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=1630, height=1930, overlap_mm=40))
-
+def ESPA_160X190(version = "V2"):
     ZERO = (15, 15)
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=1600, height=1900, overlap_mm=40))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100), width=1400, height=1700, overlap_mm=40))
-
-
-    FIRST_CIRCLE = (ZERO[0] + 100 + 117.5, ZERO[1] + 100 + 106.25, ZERO[1] + 100 + 106.25 + 850)
-
-    # 1 ROW
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 0, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 1, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 2, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 3, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 4, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 5, FIRST_CIRCLE[1] + 212.5 * 0, FIRST_CIRCLE[2] + 212.5 * 0), radius=12.5))
-
-    # 2 ROW
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 5, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 4, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 3, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 2, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 1, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 0, FIRST_CIRCLE[1] + 212.5 * 1, FIRST_CIRCLE[2] + 212.5 * 1), radius=12.5))
-
-    # 3 ROW
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 0, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 1, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 2, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 3, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 4, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 5, FIRST_CIRCLE[1] + 212.5 * 2, FIRST_CIRCLE[2] + 212.5 * 2), radius=12.5))
-
-    # 4 ROW
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 5, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 4, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 3, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 2, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 1, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-    program_lines.append(
-        circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 233 * 0, FIRST_CIRCLE[1] + 212.5 * 3, FIRST_CIRCLE[2] + 212.5 * 3), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_80X190(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    SECOND_HEAD_OFFSET = 1000
-    program_lines.append(starting_block(initial_coordinates=DualHeadCoordinates(0, 0, SECOND_HEAD_OFFSET), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(0, 0, SECOND_HEAD_OFFSET), width=1930, height=830, overlap_mm=40))
-
-    ZERO = (15, 15)
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(ZERO[0], ZERO[1], ZERO[1] + SECOND_HEAD_OFFSET), width=1900, height=800, overlap_mm=40))
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100, ZERO[1] + 100 + SECOND_HEAD_OFFSET), width=1700, height=600, overlap_mm=40))
-
-
-    FIRST_CIRCLE = (ZERO[0] + 100 + 106.25, ZERO[1] + 100 + 100, ZERO[1] + 100 + 100 + SECOND_HEAD_OFFSET)
-
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 0, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 1, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 2, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 3, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 4, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 5, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 6, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 7, FIRST_CIRCLE[1] + 200 * 0, FIRST_CIRCLE[2] + 200 * 0), radius=12.5))
-
-    # 2 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 7, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 6, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 5, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 4, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 3, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 2, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 1, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 0, FIRST_CIRCLE[1] + 200 * 1, FIRST_CIRCLE[2] + 200 * 1), radius=12.5))
-
-    # 3 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 0, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 1, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 2, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 3, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 4, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 5, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 6, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 212.5 * 7, FIRST_CIRCLE[1] + 200 * 2, FIRST_CIRCLE[2] + 200 * 2), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_80X190_SINGLE(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    CIRCLE_X_SEPARATION = 200
-    CIRCLE_Y_SEPARATION = 212.5
-
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=830, height=1930, overlap_mm=40))
-
-    ZERO = (15, 15)
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=800, height=1900, overlap_mm=40))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100), width=600, height=1700, overlap_mm=40))
-
-    SECOND_HEAD_OFFSET = 850
-    FIRST_CIRCLE = (ZERO[0] + 100 + 100, ZERO[1] + 100 + 106.25, ZERO[1] + 100 + 106.25 + SECOND_HEAD_OFFSET)
-
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_160X200(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    SECOND_HEAD_OFFSET = 699
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=2030, height=1630, overlap_mm=40))
-
-    ZERO = (15, 15)
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=2000, height=1600, overlap_mm=40))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100), width=1800, height=1400, overlap_mm=40))
-
-
-    FIRST_CIRCLE = (ZERO[0] + 100 + 112.5, ZERO[1] + 100 + 117.5, ZERO[1] + 100 + 117.5 + SECOND_HEAD_OFFSET)
-
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 233 * 0, FIRST_CIRCLE[2] + 233 * 0), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 233 * 1, FIRST_CIRCLE[2] + 233 * 1), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 233 * 2, FIRST_CIRCLE[2] + 233 * 2), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_90X200(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    SECOND_HEAD_OFFSET = 1000
-    CIRCLE_X_SEPARATION = 225
-    CIRCLE_Y_SEPARATION = 230
-
-    program_lines.append(starting_block(initial_coordinates=DualHeadCoordinates(0, 0, SECOND_HEAD_OFFSET), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(0, 0, SECOND_HEAD_OFFSET), width=2030, height=930, overlap_mm=40))
-
-    ZERO = (15, 15)
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(ZERO[0], ZERO[1], ZERO[1] + SECOND_HEAD_OFFSET), width=2000, height=900, overlap_mm=40))
-    program_lines.append(rectangle_dual(state, start=DualHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100, ZERO[1] + 100 + SECOND_HEAD_OFFSET), width=1800, height=700, overlap_mm=40))
-
-    FIRST_CIRCLE = (ZERO[0] + 100 + 112.5, ZERO[1] + 100 + 120, ZERO[1] + 100 + 120 + SECOND_HEAD_OFFSET)
-
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 3, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 4, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 5, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 6, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 7, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 7, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 6, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 5, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 4, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 3, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 3, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 4, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 5, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 6, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 7, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_90X200_SINGLE(version = "V1"):
-    state = MachineState()
-    name = f"{inspect.currentframe().f_code.co_name}_{version}"
-    program_lines: List[str] = []
-    CIRCLE_X_SEPARATION = 230
-    CIRCLE_Y_SEPARATION = 225
-
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=930, height=2030, overlap_mm=40))
-
-    ZERO = (15, 15)
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=900, height=2000, overlap_mm=40))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100), width=700, height=1800, overlap_mm=40))
-
-    SECOND_HEAD_OFFSET = 900
-    FIRST_CIRCLE = (ZERO[0] + 100 + 120, ZERO[1] + 100 + 112.5, ZERO[1] + 100 + 112.5 + SECOND_HEAD_OFFSET)
-
-    # 1 ROW
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 0, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 0), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 1, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 1), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 2, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 2), radius=12.5))
-
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 2, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 1, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + CIRCLE_X_SEPARATION * 0, FIRST_CIRCLE[1] + CIRCLE_Y_SEPARATION * 3, FIRST_CIRCLE[2] + CIRCLE_Y_SEPARATION * 3), radius=12.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
-
-def ESPA_140X200(version = "V1"):
-    state = MachineState()
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
-    program_lines: List[str] = []
-    SECOND_HEAD_OFFSET = 480
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1630, 1930),
+            RectSpec(ZERO, 1600, 1900),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1700, start_offset_y=400),
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 117.5, ZERO[1] + 100 + 106.25),
+            nx=6, ny=4,
+            dx=233, dy=212.5,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=850,
+        dual_max_y=None,
+    )
 
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=2030, height=1430, overlap_mm=40))
+    return build_bed_program(spec), name
 
+def ESPA_80X190(version = "V2"):
     ZERO = (15, 15)
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=2000, height=1400, overlap_mm=40))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0] + 100, ZERO[1] + 100), width=1800, height=1200, overlap_mm=40))
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1930, 830, dual=True),
+            RectSpec(ZERO, 1900, 800, dual=True),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1700, 600, dual=True, start_offset_y=200)
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 106.25, ZERO[1] + 100 + 100),
+            nx=8, ny=3,
+            dx=212.5, dy=200,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=1000,
+        dual_max_y=None,
+    )
 
-    FIRST_CIRCLE = (ZERO[0] + 100 + 112.5, ZERO[1] + 100 + 120, ZERO[1] + 100 + 120 + SECOND_HEAD_OFFSET)
+    return build_bed_program(spec), name
 
-    # 1 ROW
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
-    program_lines.append(circle_single(state, center=SingleHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 240 * 0), radius=12.5))
+def ESPA_80X190_SINGLE(version = "V2"):
+    ZERO = (15, 15)
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 240 * 1, FIRST_CIRCLE[2] + 240 * 1), radius=12.5))
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 830, 1930),
+            RectSpec(ZERO, 800, 1900),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 600, 1700, start_offset_y=400)
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 100, ZERO[1] + 100 + 106.25),
+            nx=3, ny=4,
+            dx=200, dy=212.5,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=850,
+        dual_max_y=None,
+    )
 
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 0, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 1, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 2, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 3, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 4, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 5, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 6, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(FIRST_CIRCLE[0] + 225 * 7, FIRST_CIRCLE[1] + 240 * 2, FIRST_CIRCLE[2] + 240 * 2), radius=12.5))
+    return build_bed_program(spec), name
 
-    program_lines.append(end_block())
-    return program_lines, name
+def ESPA_160X200(version = "V2"):
+    ZERO = (15, 15)
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
-def KINSO_80X190(version="V1"):
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1630, 2030),
+            RectSpec(ZERO, 1600, 2000),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1800, start_offset_y=400),
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 117.5, ZERO[1] + 100 + 112.5),
+            nx=6, ny=4,
+            dx=233, dy=225,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=900,
+        dual_max_y=None,
+    )
+
+    return build_bed_program(spec), name
+
+def ESPA_90X200(version = "V2"):
+    ZERO = (15, 15)
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 2030, 930, dual=True),
+            RectSpec(ZERO, 2000, 900, dual=True),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1800, 700, dual=True, start_offset_y=200)
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 112.5, ZERO[1] + 100 + 120),
+            nx=8, ny=3,
+            dx=225, dy=230,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=1000,
+        dual_max_y=None,
+    )
+
+    return build_bed_program(spec), name
+
+def ESPA_90X200_SINGLE(version = "V2"):
+    ZERO = (15, 15)
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 930, 2030),
+            RectSpec(ZERO, 900, 2000),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 700, 1800, start_offset_y=400)
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 120, ZERO[1] + 100 + 112.5),
+            nx=3, ny=4,
+            dx=230, dy=225,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=900,
+        dual_max_y=None,
+    )
+
+    return build_bed_program(spec), name
+
+def ESPA_140X200(version = "V2"):
+    ZERO = (15, 15)
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1430, 2030),
+            RectSpec(ZERO, 1400, 2000),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1200, 1800, start_offset_y=400),
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 100 + 120, ZERO[1] + 100 + 112.5),
+            nx=5, ny=4,
+            dx=240, dy=225,
+            radius=12.5,
+            snake=True,
+        ),
+        second_head_y_offset=900,
+        dual_max_y=None,
+    )
+
+    return build_bed_program(spec), name
+
+def KINSO_80X190(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -677,7 +506,7 @@ def KINSO_80X190(version="V1"):
             start=(ZERO[0] + 100 + 85, ZERO[1] + 100 + 75),
             nx=10, ny=4,
             dx=170, dy=150,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=1000,
@@ -686,7 +515,7 @@ def KINSO_80X190(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_80X190_SINGLE(version="V1"):
+def KINSO_80X190_SINGLE(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -701,7 +530,7 @@ def KINSO_80X190_SINGLE(version="V1"):
             start=(ZERO[0] + 100 + 75, ZERO[1] + 100 + 85),
             nx=4, ny=5,
             dx=150, dy=170,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=850,
@@ -710,7 +539,7 @@ def KINSO_80X190_SINGLE(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_90X200(version="V1"):
+def KINSO_90X200(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -725,7 +554,7 @@ def KINSO_90X200(version="V1"):
             start=(ZERO[0] + 100 + 90, ZERO[1] + 100 + 87),
             nx=10, ny=4,
             dx=180, dy=175,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=1000,
@@ -734,7 +563,7 @@ def KINSO_90X200(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_90X200_SINGLE(version="V1"):
+def KINSO_90X200_SINGLE(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -749,7 +578,7 @@ def KINSO_90X200_SINGLE(version="V1"):
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
             nx=4, ny=5,
             dx=175, dy=180,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=900,
@@ -758,7 +587,7 @@ def KINSO_90X200_SINGLE(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_120X190(version="V1"):
+def KINSO_120X190(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -773,7 +602,7 @@ def KINSO_120X190(version="V1"):
             start=(ZERO[0] + 100 + 82.5, ZERO[1] + 100 + 85),
             nx=6, ny=5,
             dx=167, dy=170,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=850,
@@ -782,7 +611,7 @@ def KINSO_120X190(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_160X190(version="V1"):
+def KINSO_160X190(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -797,7 +626,7 @@ def KINSO_160X190(version="V1"):
             start=(ZERO[0] + 100 + 87.5, ZERO[1] + 100 + 85),
             nx=8, ny=5,
             dx=175, dy=170,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=850,
@@ -806,7 +635,7 @@ def KINSO_160X190(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_140X200(version="V1"):
+def KINSO_140X200(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -821,7 +650,7 @@ def KINSO_140X200(version="V1"):
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
             nx=7, ny=5,
             dx=175, dy=180,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=900,
@@ -830,7 +659,7 @@ def KINSO_140X200(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_160X200(version="V1"):
+def KINSO_160X200(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -845,7 +674,7 @@ def KINSO_160X200(version="V1"):
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
             nx=8, ny=5,
             dx=175, dy=180,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=900,
@@ -854,7 +683,7 @@ def KINSO_160X200(version="V1"):
 
     return build_bed_program(spec), name
 
-def KINSO_180X200(version="V1"):
+def KINSO_180X200(version="V2"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -869,7 +698,7 @@ def KINSO_180X200(version="V1"):
             start=(ZERO[0] + 100 + 88, ZERO[1] + 100 + 90),
             nx=9, ny=5,
             dx=178, dy=180,
-            radius=10,
+            radius=12.5,
             snake=True,
         ),
         second_head_y_offset=900,
@@ -879,10 +708,9 @@ def KINSO_180X200(version="V1"):
     return build_bed_program(spec), name
 
 if __name__ == "__main__":
-    program, name = SLEEPWELL_STRIPES_140()
+    program, name = ESPA_140X200()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
     x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC")
     save_vrp(f"outputs/{model_name}/{name}.CNC", name, int(x_max), int(y_max))
-
