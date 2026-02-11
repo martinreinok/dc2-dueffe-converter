@@ -9,6 +9,8 @@ HeadMode = Literal["none", "single", "dual"]
 @dataclass
 class MachineState:
     head_mode: HeadMode = "none"
+    last_qlz: float | None = None
+    last_qlyz: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -26,11 +28,38 @@ class SingleHeadCoordinates:
 
 Coordinates = Union[DualHeadCoordinates, SingleHeadCoordinates]
 
+def ensure_qlz(state: MachineState, z: float) -> List[str]:
+    if state.last_qlz is None:
+        state.last_qlz = z
+        state.last_qlyz = None
+        return [f"CALL QLY {fmt(z)}"]
+    return []
+
+def ensure_qlyz(state: MachineState, y: float, z: float) -> List[str]:
+    if state.last_qlyz is None:
+        state.last_qlyz = (y, z)
+        state.last_qlz = None
+        return [f"CALL QLYZ {fmt(y)} {fmt(z)}"]
+    return []
 
 def fmt(n: float) -> str:
     # Stable controller-friendly formatting (no scientific notation)
-    s = f"{n:.6f}".rstrip("0").rstrip(".")
+    s = f"{n:.2f}".rstrip("0").rstrip(".")
     return s if s else "0"
+
+def arc_endpoint_from_sweep(center: SingleHeadCoordinates,
+                           start: SingleHeadCoordinates,
+                           radius: float,
+                           sweep_deg: float) -> SingleHeadCoordinates:
+    cx, cy = center.x, center.y
+    # Angle of current position on the circle
+    theta0 = math.atan2(start.y - cy, start.x - cx)
+    theta1 = theta0 + math.radians(sweep_deg)
+
+    return SingleHeadCoordinates(
+        cx + radius * math.cos(theta1),
+        cy + radius * math.sin(theta1),
+    )
 
 def _unit_vec(x0: float, y0: float, x1: float, y1: float) -> tuple[float, float]:
     dx, dy = (x1 - x0), (y1 - y0)
@@ -73,7 +102,7 @@ def tool_down_dual(state: MachineState) -> List[str]:
     return out
 
 
-def starting_block(initial_coordinates: Coordinates, design_name: str = "DESIGN_NAME_DIMENSIONS_VERSION") -> str:
+def starting_block(state: MachineState, initial_coordinates: Coordinates, design_name: str = "DESIGN_NAME_DIMENSIONS_VERSION") -> str:
     block = f"""BLOCK VA1
 VELL 166.67
 ACCL 333.33
@@ -104,15 +133,16 @@ v991=1
 CALL INIZIO
 LABEL 1
 CALL INLAV1
-CALL VA1
-CALL FLZ"""
+CALL VA1"""
 
     if isinstance(initial_coordinates, DualHeadCoordinates):
         pass
         coords = ";"
         # coords = f"""CALL QLYZ {fmt(initial_coordinates.y)} {fmt(initial_coordinates.z)}"""
     else:
-        coords = f"""CALL QLY {fmt(initial_coordinates.y)}"""
+        coords = f"""CALL FLZ\nCALL QLY {fmt(initial_coordinates.y)}"""
+        state.last_qlz = initial_coordinates.y
+
 
     return block + "\n" + coords
 
@@ -139,6 +169,7 @@ def rectangle(state: MachineState, start: SingleHeadCoordinates, width: float, h
         overlap_mm = overlap_mm + start_offset_y
 
     lines: List[str] = []
+    lines.extend(ensure_qlz(state, y))
     lines.append(mr_move_head(start))
     lines.extend(tool_down_single(state))
 
@@ -177,7 +208,7 @@ def rectangle_dual(state: MachineState,start: DualHeadCoordinates,width: float,h
         overlap_mm = overlap_mm + start_offset_y
 
     lines: List[str] = []
-    lines.append(f"CALL QLYZ {fmt(y)} {fmt(z)}")
+    lines.extend(ensure_qlyz(state, y, z))
     lines.append(mr_move_head(start))
     lines.extend(tool_down_dual(state))
 
@@ -321,7 +352,7 @@ def polyline_dual(
     end_y = pn.y - uyn * lead_out_mm
 
     lines: List[str] = []
-    lines.append(f"CALL QLYZ {fmt(p0.y)} {fmt(p0.z)}")
+    lines.extend(ensure_qlyz(state, p0.y, p0.z))
     lines.append(_mr_xyz(start_x, start_y, start_z))
     if add_semicolon_line:
         lines.append(";")
@@ -353,38 +384,77 @@ def line_dual(
     return polyline_dual(state, [a, b], lead_in_mm=lead_mm, lead_out_mm=lead_mm, lift=lift)
 
 
-def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float) -> str:
-    start = DualHeadCoordinates(center.x - radius, center.y, center.z)
+def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float, second_sweep_deg: float = -270, second_arc_offset = (0, 0), reverse=False, start_top=True) -> str:
+
+    if start_top:
+        start = DualHeadCoordinates(center.x, center.y + radius, center.z + radius)
+    else:
+        start = DualHeadCoordinates(center.x - radius, center.y, center.z)
+
+    first_sweep = (+180 if reverse else -180)
 
     lines: List[str] = []
-    lines.append(f"CALL QLYZ {fmt(center.y)} {fmt(center.z)}")
+    lines.extend(ensure_qlyz(state, center.y, center.z))
     lines.append(mr_move_head(start))
     lines.append(";")
     lines.extend(tool_down_dual(state))
 
+    if start_top:
+        after_first = SingleHeadCoordinates(center.x, center.y - radius)
+    else:
+        after_first = SingleHeadCoordinates(center.x + radius, center.y)
+
+    # Compute correct endpoint for the desired sweep
+    end2 = arc_endpoint_from_sweep(center, after_first, radius, second_sweep_deg)
+
     lines.extend([
         "FREEZE",
-        f"ARC X{fmt(center.x + radius)}Y{fmt(center.y)} a=-180",
-        f"ARC X{fmt(center.x)}Y{fmt(center.y + radius)} a=-270",
+        f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}",
+        f"ARC X{fmt(end2.x + second_arc_offset[0])}Y{fmt(end2.y + second_arc_offset[1])} a={fmt(second_sweep_deg)}",
         "SYNC",
         "CALL UP1",
     ])
 
     return "\n".join(lines)
 
+def reverse_sweep_keep_endpoint(sweep_deg: float) -> float:
+    m = abs(sweep_deg) % 360
+    if m == 0:
+        return -360 if sweep_deg > 0 else 360  # full circle case
+    return -(1 if sweep_deg > 0 else -1) * (360 - m)
 
-def circle_single(state: MachineState, center: SingleHeadCoordinates, radius: float) -> str:
-    start = SingleHeadCoordinates(center.x - radius, center.y)
+
+def circle_single(state: MachineState,
+                  center: SingleHeadCoordinates,
+                  radius: float,
+                  second_sweep_deg: float = -270,
+                  second_arc_offset = (0, 0), reverse=False, start_top=True) -> str:
+
+    if start_top:
+        start = SingleHeadCoordinates(center.x, center.y + radius)
+    else:
+        start = SingleHeadCoordinates(center.x - radius, center.y)
+
+    first_sweep = (+180 if reverse else -180)
 
     lines: List[str] = []
+    lines.extend(ensure_qlz(state, start.y))
     lines.append(mr_move_head(start))
     lines.append(";")
     lines.extend(tool_down_single(state))
 
+    if start_top:
+        after_first = SingleHeadCoordinates(center.x, center.y - radius)
+    else:
+        after_first = SingleHeadCoordinates(center.x + radius, center.y)
+
+    # Compute correct endpoint for the desired sweep
+    end2 = arc_endpoint_from_sweep(center, after_first, radius, second_sweep_deg)
+
     lines.extend([
         "FREEZE",
-        f"ARC X{fmt(center.x + radius)}Y{fmt(center.y)} a=-180",
-        f"ARC X{fmt(center.x)}Y{fmt(center.y + radius)} a=-270",
+        f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}",
+        f"ARC X{fmt(end2.x + second_arc_offset[0])}Y{fmt(end2.y + second_arc_offset[1])} a={fmt(second_sweep_deg)}",
         "SYNC",
         "CALL UP1",
     ])

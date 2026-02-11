@@ -118,7 +118,7 @@ def dxf_to_cnc_single(dxf_path: str, design_name: str) -> List[str]:
     # --- CNC Generation ---
     state = MachineState()
     program_lines = []
-    program_lines.append(starting_block(SingleHeadCoordinates(0, 0), design_name))
+    program_lines.append(starting_block(state, SingleHeadCoordinates(0, 0), design_name))
 
     for seg in optimized_segments:
         if seg.entity_type == "LINE":
@@ -168,6 +168,8 @@ class BedSpec:
     rectangles: List[RectSpec]
     grid: GridSpec
 
+    custom_circle_sweep: Optional[float] = -270
+    custom_second_arc_offset: Optional[tuple] = (0, 0)
     # Dual-head settings (optional)
     second_head_y_offset: Optional[float] = None
     # If you want to constrain dual to inner area instead of full panel:
@@ -175,27 +177,49 @@ class BedSpec:
 
 
 def iter_grid_points(grid: GridSpec):
-    """Yield (x,y) in either snake or normal scan order."""
+    """
+    Yield (x, y, reversed_row) in either snake or normal scan order.
+    reversed_row=True means we're scanning X in decreasing order for that row.
+    """
     x0, y0 = grid.start
     for row in range(grid.ny):
         y = y0 + row * grid.dy
-        xs = [x0 + col * grid.dx for col in range(grid.nx)]
-        if grid.snake and (row % 2 == 1):
-            xs.reverse()
-        for x in xs:
-            yield x, y
 
+        xs = [x0 + col * grid.dx for col in range(grid.nx)]
+        reversed_row = bool(grid.snake and (row % 2 == 1))
+        if reversed_row:
+            xs.reverse()
+
+        for x in xs:
+            yield x, y, reversed_row
+
+def will_first_op_be_dual(spec: BedSpec) -> bool:
+    off = spec.second_head_y_offset
+    if off is None:
+        return False
+
+    # 1) rectangles come first
+    for r in spec.rectangles:
+        return bool(r.dual)  # first rectangle decides
+
+    # 2) otherwise first grid point decides
+    x0, y0 = spec.grid.start
+    y2 = y0 + off
+    if spec.dual_max_y is not None and y2 > spec.dual_max_y:
+        return False
+    return True
 
 def build_bed_program(spec: BedSpec) -> List[str]:
     state = MachineState()
     program: List[str] = []
 
     off = spec.second_head_y_offset
+    start_dual = will_first_op_be_dual(spec)
 
-    if off is not None:
-        program.append(starting_block(DualHeadCoordinates(0, 0, off), spec.name))
+    if start_dual and off is not None:
+        program.append(starting_block(state, DualHeadCoordinates(0, 0, off), spec.name))
     else:
-        program.append(starting_block(SingleHeadCoordinates(0, 0), spec.name))
+        program.append(starting_block(state, SingleHeadCoordinates(0, 0), spec.name))
 
     def D(x: float, y: float) -> DualHeadCoordinates:
         return DualHeadCoordinates(x, y, y + off)
@@ -225,12 +249,20 @@ def build_bed_program(spec: BedSpec) -> List[str]:
                 )
             )
 
-    # Circles (auto dual if configured + valid)
+    # Circles
     grid = spec.grid
-    off = spec.second_head_y_offset
     dual_max_y = spec.dual_max_y
 
-    for x, y in iter_grid_points(grid):
+    for x, y, reversed_row in iter_grid_points(grid):
+        # Match your manual behavior:
+        # normal row: sweep = -190, reverse=False
+        # reversed row: sweep = +190, reverse=True
+        sweep = spec.custom_circle_sweep
+        reverse = False
+        if reversed_row:
+            sweep = -sweep if sweep is not None else sweep
+            reverse = True
+
         if off is not None:
             y2 = y + off
             dual_ok = True
@@ -239,12 +271,28 @@ def build_bed_program(spec: BedSpec) -> List[str]:
 
             if dual_ok:
                 program.append(
-                    circle_dual(state, center=DualHeadCoordinates(x, y, y2), radius=grid.radius)
+                    circle_dual(
+                        state,
+                        center=DualHeadCoordinates(x, y, y2),
+                        radius=grid.radius,
+                        second_sweep_deg=sweep,
+                        second_arc_offset=spec.custom_second_arc_offset,
+                        reverse=reverse,
+                    )
                 )
-                continue  # done for this point
+                continue
 
         # fallback single
-        program.append(circle_single(state, center=SingleHeadCoordinates(x, y), radius=grid.radius))
+        program.append(
+            circle_single(
+                state,
+                center=SingleHeadCoordinates(x, y),
+                radius=grid.radius,
+                second_sweep_deg=sweep,
+                second_arc_offset=spec.custom_second_arc_offset,
+                reverse=reverse,
+            )
+        )
 
     program.append(end_block())
     return program
@@ -264,11 +312,11 @@ def save_vrp(cnc_path: str, name: str, max_x: float, max_y: float) -> None:
     )
     save_program(vrp, vrp_path, crlf=True)
 
-def ILVA_80X190_R_V52_SINGLE():
+def OLD_PROGRAM_TYPE():
     state = MachineState()
 
     program_lines: List[str] = []
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name="ILVA_80X190_R_V52_SINGLE"))
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name="ILVA_80X190_R_V52_SINGLE"))
 
     program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=840, height=1940, overlap_mm=40))
     program_lines.append(
@@ -300,30 +348,124 @@ def ILVA_80X190_R_V52_SINGLE():
     program_lines.append(end_block())
     return program_lines
 
-def SLEEPWELL_STRIPES_140(version = "V2"):
+def CIRCLE_25MM_KINSO(version = "V2"):
     state = MachineState()
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
     program_lines: List[str] = []
-    program_lines.append(starting_block(initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
-    #
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 0, 0.00), b=SingleHeadCoordinates(0 + 105 * 0, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 1, 1120), b=SingleHeadCoordinates(0 + 105 * 1, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 2, 0.00), b=SingleHeadCoordinates(0 + 105 * 2, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 3, 1120), b=SingleHeadCoordinates(0 + 105 * 3, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 4, 0.00), b=SingleHeadCoordinates(0 + 105 * 4, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 5, 1120), b=SingleHeadCoordinates(0 + 105 * 5, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 6, 0.00), b=SingleHeadCoordinates(0 + 105 * 6, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 7, 1120), b=SingleHeadCoordinates(0 + 105 * 7, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 8, 0.00), b=SingleHeadCoordinates(0 + 105 * 8, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 9, 1120), b=SingleHeadCoordinates(0 + 105 * 9, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 10, 0.00), b=SingleHeadCoordinates(0 + 105 * 10, 1120)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 11, 1120), b=SingleHeadCoordinates(0 + 105 * 11, 0.00)))
-    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 12, 0.00), b=SingleHeadCoordinates(0 + 105 * 12, 1120)))
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(0, 0), radius=12.5, second_sweep_deg=-190))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(0, 100), radius=12.5, second_sweep_deg=-190))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(0, 200), radius=12.5, second_sweep_deg=-190))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(0, 300), radius=12.5, second_sweep_deg=-190))
 
     program_lines.append(end_block())
     return program_lines, name
 
-def ESPA_160X190(version = "V2"):
+def CIRCLE_45MM(version = "V1"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(0, 0), radius=22.5))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def ILVA_80X190_SINGLE(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name="ILVA_80X190_R_V52_SINGLE"))
+
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=840, height=1940, overlap_mm=40))
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(20, 20), width=800, height=1900, overlap_mm=40))
+
+    # 3 bottom single
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(185, 170), radius=22.5))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(185 + 235, 170), radius=22.5))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(185 + 235 + 235, 170), radius=22.5))
+
+    # 2 double
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(303 + 235, 370, 370 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(303, 370, 370 + 800), radius=22.5))
+
+    # 3 double
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185, 570, 570 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185 + 235, 570, 570 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185 + 235 + 235, 570, 570 + 800), radius=22.5))
+
+    # 2 double
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(303 + 235, 770, 770 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(303, 770, 770 + 800), radius=22.5))
+
+    # 3 double
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185, 970, 970 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185 + 235, 970, 970 + 800), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(185 + 235 + 235, 970, 970 + 800), radius=22.5))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def ILVA_160X200(version = "V1"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    ZERO = (15, 15)
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=name))
+
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=1630, height=2030, overlap_mm=40, start_offset_y=300))
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=1600, height=2000, overlap_mm=40, start_offset_y=300))
+
+    # 6 bottom
+    y = ZERO[1] + 150
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 0, y + 200 * 0, y + 1000), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 1, y + 200 * 0, y + 1000), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 2, y + 200 * 0, y + 1000), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 3, y + 200 * 0, y + 1000), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 4, y + 200 * 0, y + 1000), radius=22.5))
+    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 5, y + 200 * 0, y + 1000), radius=22.5))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def SLEEPWELL_STRIPES_140(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 10), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0 + 105 * 0, 0.00), b=SingleHeadCoordinates(0 + 105 * 0, 1120)))
+
+    START = (200, 0)
+    STEP = 105
+    HEIGHT = 1120
+
+    for i in range(13):
+        x = START[0] + STEP * i
+
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(START[0] + 200 + 105 * 12, 0.00), b=SingleHeadCoordinates(START[0] + 200 + 105 * 12, 1120)))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def ESPA_160X190(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -347,7 +489,7 @@ def ESPA_160X190(version = "V2"):
 
     return build_bed_program(spec), name
 
-def ESPA_80X190(version = "V2"):
+def ESPA_80X190(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -365,13 +507,13 @@ def ESPA_80X190(version = "V2"):
             radius=12.5,
             snake=True,
         ),
-        second_head_y_offset=1000,
+        second_head_y_offset=900,
         dual_max_y=None,
     )
 
     return build_bed_program(spec), name
 
-def ESPA_80X190_SINGLE(version = "V2"):
+def ESPA_80X190_SINGLE(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -395,7 +537,7 @@ def ESPA_80X190_SINGLE(version = "V2"):
 
     return build_bed_program(spec), name
 
-def ESPA_160X200(version = "V2"):
+def ESPA_160X200(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -419,7 +561,7 @@ def ESPA_160X200(version = "V2"):
 
     return build_bed_program(spec), name
 
-def ESPA_90X200(version = "V2"):
+def ESPA_90X200(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -443,7 +585,7 @@ def ESPA_90X200(version = "V2"):
 
     return build_bed_program(spec), name
 
-def ESPA_90X200_SINGLE(version = "V2"):
+def ESPA_90X200_SINGLE(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -467,7 +609,7 @@ def ESPA_90X200_SINGLE(version = "V2"):
 
     return build_bed_program(spec), name
 
-def ESPA_140X200(version = "V2"):
+def ESPA_140X200(version = "V3"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -491,7 +633,7 @@ def ESPA_140X200(version = "V2"):
 
     return build_bed_program(spec), name
 
-def KINSO_80X190(version="V2"):
+def KINSO_80X190(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -500,7 +642,7 @@ def KINSO_80X190(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1930, 830, dual=True),
             RectSpec(ZERO, 1900, 800, dual=True),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1700, 600, dual=True),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1700, 600, dual=True, start_offset_y=200),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 85, ZERO[1] + 100 + 75),
@@ -509,13 +651,14 @@ def KINSO_80X190(version="V2"):
             radius=12.5,
             snake=True,
         ),
-        second_head_y_offset=1000,
+        second_head_y_offset=900,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_80X190_SINGLE(version="V2"):
+def KINSO_80X190_SINGLE(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -524,7 +667,7 @@ def KINSO_80X190_SINGLE(version="V2"):
         rectangles=[
             RectSpec((0, 0), 830, 1930),
             RectSpec(ZERO, 800, 1900),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 600, 1700),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 600, 1700, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 75, ZERO[1] + 100 + 85),
@@ -535,11 +678,12 @@ def KINSO_80X190_SINGLE(version="V2"):
         ),
         second_head_y_offset=850,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_90X200(version="V2"):
+def KINSO_90X200(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -548,7 +692,7 @@ def KINSO_90X200(version="V2"):
         rectangles=[
             RectSpec((0, 0), 2030, 930, dual=True),
             RectSpec(ZERO, 2000, 900, dual=True),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1800, 700, dual=True),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1800, 700, dual=True, start_offset_y=200),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 90, ZERO[1] + 100 + 87),
@@ -559,11 +703,12 @@ def KINSO_90X200(version="V2"):
         ),
         second_head_y_offset=1000,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_90X200_SINGLE(version="V2"):
+def KINSO_90X200_SINGLE(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -572,7 +717,7 @@ def KINSO_90X200_SINGLE(version="V2"):
         rectangles=[
             RectSpec((0, 0), 930, 2030),
             RectSpec(ZERO, 900, 2000),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 700, 1800),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 700, 1800, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
@@ -583,11 +728,12 @@ def KINSO_90X200_SINGLE(version="V2"):
         ),
         second_head_y_offset=900,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_120X190(version="V2"):
+def KINSO_120X190(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -596,7 +742,7 @@ def KINSO_120X190(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1230, 1930),
             RectSpec(ZERO, 1200, 1900),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1000, 1700),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1000, 1700, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 82.5, ZERO[1] + 100 + 85),
@@ -607,11 +753,12 @@ def KINSO_120X190(version="V2"):
         ),
         second_head_y_offset=850,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_160X190(version="V2"):
+def KINSO_160X190(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -620,7 +767,7 @@ def KINSO_160X190(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1630, 1930),
             RectSpec(ZERO, 1600, 1900),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1700),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1700, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 87.5, ZERO[1] + 100 + 85),
@@ -631,11 +778,12 @@ def KINSO_160X190(version="V2"):
         ),
         second_head_y_offset=850,
         dual_max_y=None,
+        custom_circle_sweep=-190
     )
 
     return build_bed_program(spec), name
 
-def KINSO_140X200(version="V2"):
+def KINSO_140X200(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -644,7 +792,7 @@ def KINSO_140X200(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1430, 2030),
             RectSpec(ZERO, 1400, 2000),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1200, 1800),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1200, 1800, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
@@ -655,11 +803,12 @@ def KINSO_140X200(version="V2"):
         ),
         second_head_y_offset=900,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_160X200(version="V2"):
+def KINSO_160X200(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -668,7 +817,7 @@ def KINSO_160X200(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1630, 2030),
             RectSpec(ZERO, 1600, 2000),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1800),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1400, 1800, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 87, ZERO[1] + 100 + 90),
@@ -679,11 +828,12 @@ def KINSO_160X200(version="V2"):
         ),
         second_head_y_offset=900,
         dual_max_y=None,
+        custom_circle_sweep=-200
     )
 
     return build_bed_program(spec), name
 
-def KINSO_180X200(version="V2"):
+def KINSO_180X200(version="V7"):
     ZERO = (15, 15)
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
 
@@ -692,7 +842,7 @@ def KINSO_180X200(version="V2"):
         rectangles=[
             RectSpec((0, 0), 1830, 2030),
             RectSpec(ZERO, 1800, 2000),
-            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1600, 1800),
+            RectSpec((ZERO[0] + 100, ZERO[1] + 100), 1600, 1800, start_offset_y=300),
         ],
         grid=GridSpec(
             start=(ZERO[0] + 100 + 88, ZERO[1] + 100 + 90),
@@ -703,14 +853,277 @@ def KINSO_180X200(version="V2"):
         ),
         second_head_y_offset=900,
         dual_max_y=None,
+        custom_circle_sweep=-200
+
     )
 
     return build_bed_program(spec), name
 
+def RUTA_120_L(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, 1240)))
+
+    START = (351, 0)
+    STEP = 256
+    HEIGHT = 1240
+    WIDTH = 1470
+
+    for i in range(4):
+        x = START[0] + STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(WIDTH, 1240), b=SingleHeadCoordinates(WIDTH, 0)))
+
+    START = (WIDTH, 964)
+    STEP = 256
+
+    for i in range(3):
+        y = START[1] - STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(WIDTH, y)
+            b = SingleHeadCoordinates(0.0, y)
+        else:
+            a = SingleHeadCoordinates(0.0, y)
+            b = SingleHeadCoordinates(WIDTH, y)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def RUTA_140_L(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, 1240)))
+
+    START = (451, 0)
+    STEP = 256
+    HEIGHT = 1240
+    WIDTH = 1670
+
+    for i in range(4):
+        x = START[0] + STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(WIDTH, 1240), b=SingleHeadCoordinates(WIDTH, 0)))
+
+    START = (WIDTH, 964)
+    STEP = 256
+
+    for i in range(3):
+        y = START[1] - STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(WIDTH, y)
+            b = SingleHeadCoordinates(0.0, y)
+        else:
+            a = SingleHeadCoordinates(0.0, y)
+            b = SingleHeadCoordinates(WIDTH, y)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def RUTA_160_L(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, 1240)))
+
+    START = (423, 0)
+    STEP = 256
+    HEIGHT = 1240
+    WIDTH = 1870
+
+    for i in range(5):
+        x = START[0] + STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(WIDTH, 0), b=SingleHeadCoordinates(WIDTH, 1240)))
+
+    START = (WIDTH, 964)
+    STEP = 256
+    for i in range(3):
+        y = START[1] - STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(WIDTH, y)
+            b = SingleHeadCoordinates(0.0, y)
+        else:
+            a = SingleHeadCoordinates(0.0, y)
+            b = SingleHeadCoordinates(WIDTH, y)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def RUTA_180_L(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+
+    START = (395, 0)
+    STEP = 256
+    HEIGHT = 1240
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, HEIGHT)))
+
+
+
+    for i in range(6):
+        x = START[0] + STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    START = (1870, 964)
+    STEP = 256
+    WIDTH = 2070
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(WIDTH, HEIGHT), b=SingleHeadCoordinates(WIDTH, 0)))
+
+    for i in range(3):
+        y = START[1] - STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(WIDTH, y)
+            b = SingleHeadCoordinates(0.0, y)
+        else:
+            a = SingleHeadCoordinates(0.0, y)
+            b = SingleHeadCoordinates(WIDTH, y)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def RUTA_210_L(version = "V3"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+    #
+
+    START = (417, 0)
+    STEP = 256
+    HEIGHT = 1240
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, HEIGHT)))
+
+
+
+    for i in range(7):
+        x = START[0] + STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    START = (1870, 964)
+    STEP = 256
+    WIDTH = 2370
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(WIDTH, 0), b=SingleHeadCoordinates(WIDTH, HEIGHT)))
+
+    for i in range(3):
+        y = START[1] - STEP * i
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(WIDTH, y)
+            b = SingleHeadCoordinates(0.0, y)
+        else:
+            a = SingleHeadCoordinates(0.0, y)
+            b = SingleHeadCoordinates(WIDTH, y)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+def TEST_SCROLLBACK(version = "V2"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=80, height=230, overlap_mm=40))
+    ZERO = (15, 15)
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=50, height=200, overlap_mm=40))
+
+    # 3 bottom single5
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(ZERO[0] + 25, ZERO[1] + 25 * 1), radius=25))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(ZERO[0] + 25, ZERO[1] + 25 * 3), radius=25))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(ZERO[0] + 25, ZERO[1] + 25 * 5), radius=25))
+    program_lines.append(circle_single(state, center=SingleHeadCoordinates(ZERO[0] + 25, ZERO[1] + 25 * 7), radius=25))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
 if __name__ == "__main__":
-    program, name = ESPA_140X200()
+    program, name = ILVA_160X200()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
-    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC")
+    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC", margin=150, show_graph=True)
     save_vrp(f"outputs/{model_name}/{name}.CNC", name, int(x_max), int(y_max))

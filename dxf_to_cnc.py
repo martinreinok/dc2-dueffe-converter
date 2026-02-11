@@ -856,7 +856,7 @@ def print_dxf_entities(file_path: str) -> None:
 
 
 def main() -> None:
-    default_dxf = r"C:\Users\server\PycharmProjects\dc2-dueffe-converter\DXF\TESLA_190x140.dxf"
+    default_dxf = r"D:\Clients\Hilding Anders Baltic\Sleepwell\Stripes_140_borders.dxf"
     dxf_path = sys.argv[1] if len(sys.argv) >= 2 else default_dxf
     out_path = sys.argv[2] if len(sys.argv) >= 3 else str(Path(dxf_path).with_suffix(".CNC"))
 

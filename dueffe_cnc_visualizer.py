@@ -22,8 +22,14 @@ COORD_RE = re.compile(r"([XYZ])\s*=?\s*([+-]?\d+(?:\.\d+)?)", re.IGNORECASE)
 ANGLE_RE = re.compile(r"\ba\s*=\s*([+-]?\d+(?:\.\d+)?)", re.IGNORECASE)
 FLOAT_RE = re.compile(r"[+-]?\d+(?:\.\d+)?")
 
-GRAPH_MARGIN = 300.0
+_GRAPH_MARGIN = 300.0
 
+def get_graph_margin() -> float:
+    return _GRAPH_MARGIN
+
+def set_graph_margin(value: float) -> None:
+    global _GRAPH_MARGIN
+    _GRAPH_MARGIN = float(value)
 
 @dataclass
 class Segment:
@@ -151,7 +157,7 @@ def compute_bounds(segments: List[Segment]) -> Tuple[float, float, float, float]
     if not xs:
         return 0.0, 1000.0, 0.0, 1000.0
 
-    return min(xs) - GRAPH_MARGIN, max(xs) + GRAPH_MARGIN, min(ys) - GRAPH_MARGIN, max(ys) + GRAPH_MARGIN
+    return min(xs) - get_graph_margin(), max(xs) + get_graph_margin(), min(ys) - get_graph_margin(), max(ys) + get_graph_margin()
 
 
 class CNCVisualizer:
@@ -318,13 +324,16 @@ def main():
 
     viz.show()
 
-def show_interactive(filename, save_drawing: bool = True):
+def show_interactive(filename, save_drawing: bool = True, margin: float = None, show_graph = True):
+    if margin is not None:
+        set_graph_margin(margin)
     viz = CNCVisualizer(filename)
-    viz.show()
+    if show_graph:
+        viz.show()
     if save_drawing:
         png = viz.save_final_png()
         print(f"Saved: {png}")
-    return viz.xmax - GRAPH_MARGIN, viz.ymax - GRAPH_MARGIN
+    return viz.xmax - get_graph_margin(), viz.ymax - get_graph_margin()
 
 
 if __name__ == "__main__":
