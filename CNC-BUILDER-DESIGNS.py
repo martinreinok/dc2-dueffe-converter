@@ -144,6 +144,17 @@ def dxf_to_cnc_single(dxf_path: str, design_name: str) -> List[str]:
     return program_lines
 
 @dataclass
+class RowSpec:
+    xs: Optional[List[float]] = None
+    x0: Optional[float] = None
+    nx: Optional[int] = None
+    dx: Optional[float] = None
+    force_single: bool = False
+    y: Optional[float] = None
+    y_offset: float = 0.0
+    y_step: float = 0.0
+
+@dataclass
 class RectSpec:
     start: Tuple[float, float]
     width: float
@@ -154,13 +165,16 @@ class RectSpec:
 
 @dataclass
 class GridSpec:
-    start: Tuple[float, float]          # first circle center (x0, y0)
-    nx: int
-    ny: int
-    dx: float
-    dy: float
+    start: Tuple[float, float]
     radius: float
-    snake: bool = True                  # serpentine order
+    snake: bool = True
+    nx: int = 0
+    ny: int = 0
+    dx: float = 0.0
+    dy: float = 0.0
+    rows: Optional[List[RowSpec]] = None
+    y_offset: float = 0.0
+
 
 @dataclass
 class BedSpec:
@@ -177,21 +191,38 @@ class BedSpec:
 
 
 def iter_grid_points(grid: GridSpec):
-    """
-    Yield (x, y, reversed_row) in either snake or normal scan order.
-    reversed_row=True means we're scanning X in decreasing order for that row.
-    """
     x0, y0 = grid.start
-    for row in range(grid.ny):
-        y = y0 + row * grid.dy
+    base_y0 = y0 + getattr(grid, "y_offset", 0.0)
 
-        xs = [x0 + col * grid.dx for col in range(grid.nx)]
-        reversed_row = bool(grid.snake and (row % 2 == 1))
+    if not grid.rows:
+        for row in range(grid.ny):
+            y = base_y0 + row * grid.dy
+            xs = [x0 + col * grid.dx for col in range(grid.nx)]
+            reversed_row = bool(grid.snake and (row % 2 == 1))
+            if reversed_row:
+                xs.reverse()
+            for x in xs:
+                yield x, y, reversed_row, None
+        return
+    
+    for row_idx, row_spec in enumerate(grid.rows):
+        if getattr(row_spec, "y", None) is not None:
+            row_base_y = base_y0 + row_spec.y
+        else:
+            row_base_y = base_y0 + row_idx * grid.dy
+        row_base_y += getattr(row_spec, "y_offset", 0.0)
+        if row_spec.xs is not None:
+            xs = list(row_spec.xs)
+        else:
+            assert row_spec.x0 is not None and row_spec.nx is not None and row_spec.dx is not None
+            xs = [row_spec.x0 + col * row_spec.dx for col in range(row_spec.nx)]
+        reversed_row = bool(grid.snake and (row_idx % 2 == 1))
         if reversed_row:
             xs.reverse()
-
-        for x in xs:
-            yield x, y, reversed_row
+        y_step = getattr(row_spec, "y_step", 0.0)
+        for col_idx, x in enumerate(xs):
+            y = row_base_y + col_idx * y_step
+            yield x, y, reversed_row, row_spec
 
 def will_first_op_be_dual(spec: BedSpec) -> bool:
     off = spec.second_head_y_offset
@@ -253,7 +284,7 @@ def build_bed_program(spec: BedSpec) -> List[str]:
     grid = spec.grid
     dual_max_y = spec.dual_max_y
 
-    for x, y, reversed_row in iter_grid_points(grid):
+    for x, y, reversed_row, row_spec in iter_grid_points(grid):
         # Match your manual behavior:
         # normal row: sweep = -190, reverse=False
         # reversed row: sweep = +190, reverse=True
@@ -262,6 +293,19 @@ def build_bed_program(spec: BedSpec) -> List[str]:
         if reversed_row:
             sweep = -sweep if sweep is not None else sweep
             reverse = True
+
+        if row_spec is not None and row_spec.force_single:
+            program.append(
+                circle_single(
+                    state,
+                    center=SingleHeadCoordinates(x, y),
+                    radius=grid.radius,
+                    second_sweep_deg=sweep,
+                    second_arc_offset=spec.custom_second_arc_offset,
+                    reverse=reverse,
+                )
+            )
+            continue
 
         if off is not None:
             y2 = y + off
@@ -411,28 +455,67 @@ def ILVA_80X190_SINGLE(version = "V3"):
     program_lines.append(end_block())
     return program_lines, name
 
-def ILVA_160X200(version = "V1"):
-    state = MachineState()
+def ILVA_160X200_V(version = "V3"):
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    ZERO = [15, 15]
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1630, 2030, overlap_mm=40, start_offset_y=300),
+            RectSpec((ZERO[0], ZERO[1]), 1600, 2000, overlap_mm=40, start_offset_y=300),
+        ],
+        grid=GridSpec(
+            start=(0, ZERO[1] + 150 + 50),
+            dx=0, dy=200,
+            radius=23,
+            snake=True,
+            rows=[
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276, force_single=True),
+                RowSpec(x0=ZERO[0] + 110 + 138, nx=5, dx=276),
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276),
+                RowSpec(x0=ZERO[0] + 110 + 138, nx=5, dx=276),
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276),
+            ],
+            nx=0, ny=0,
+        ),
+        second_head_y_offset=800,
+        dual_max_y=None,
+        custom_circle_sweep=-200,
+        custom_second_arc_offset=(0, 0),
+    )
+    return build_bed_program(spec), name
 
-    ZERO = (15, 15)
-    program_lines: List[str] = []
-    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=name))
+def ILVA_160X200_H(version = "V3"):
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    ZERO = [15, 15]
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 2030, 1630, overlap_mm=40, start_offset_y=300),
+            RectSpec((ZERO[0], ZERO[1]), 2000, 1600, overlap_mm=40, start_offset_y=300),
+        ],
+        grid=GridSpec(
+            start=(ZERO[0] + 150 + 50, ZERO[1] + 110),
+            dx=0, dy=276,
+            radius=23,
+            snake=True,
+            rows=[
+                RowSpec(x0=ZERO[0] + 150 + 50, nx=5, dx=400),
+                RowSpec(x0=ZERO[0] + 150 + 50, nx=5, dx=400),
+                RowSpec(x0=ZERO[0] + 150 + 50, nx=5, dx=400),
+                RowSpec(x0=ZERO[0] + 150 + 50 + 200, nx=4, dx=400, y_offset=(-1 * 276 * 3) +  138),
+                RowSpec(x0=ZERO[0] + 150 + 50 + 200, nx=4, dx=400, y_offset=(-1 * 276 * 3) +  138),
+                RowSpec(x0=ZERO[0] + 150 + 50 + 200, nx=4, dx=400, y_offset=(-1 * 276 * 3) + 138, force_single=True),
 
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(0, 0), width=1630, height=2030, overlap_mm=40, start_offset_y=300))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(ZERO[0], ZERO[1]), width=1600, height=2000, overlap_mm=40, start_offset_y=300))
-
-    # 6 bottom
-    y = ZERO[1] + 150
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 0, y + 200 * 0, y + 1000), radius=22.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 1, y + 200 * 0, y + 1000), radius=22.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 2, y + 200 * 0, y + 1000), radius=22.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 3, y + 200 * 0, y + 1000), radius=22.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 4, y + 200 * 0, y + 1000), radius=22.5))
-    program_lines.append(circle_dual(state, center=DualHeadCoordinates(ZERO[0] + 110 + 276 * 5, y + 200 * 0, y + 1000), radius=22.5))
-
-    program_lines.append(end_block())
-    return program_lines, name
+            ],
+            nx=0, ny=0,
+        ),
+        second_head_y_offset=276*3,
+        dual_max_y=None,
+        custom_circle_sweep=-200,
+        custom_second_arc_offset=(0, 0),
+    )
+    return build_bed_program(spec), name
 
 def SLEEPWELL_STRIPES_140(version = "V3"):
     state = MachineState()
@@ -1121,9 +1204,9 @@ def TEST_SCROLLBACK(version = "V2"):
     return program_lines, name
 
 if __name__ == "__main__":
-    program, name = ILVA_160X200()
+    program, name = TEST_SCROLLBACK()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
-    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC", margin=150, show_graph=True)
+    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC", margin=250, show_graph=True)
     save_vrp(f"outputs/{model_name}/{name}.CNC", name, int(x_max), int(y_max))

@@ -9,6 +9,8 @@ import matplotlib
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 
+from matplotlib_tools import Ruler
+
 # try:
 #     matplotlib.use("macosx")
 # except Exception:
@@ -16,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider
+from collections import defaultdict
 
 
 COORD_RE = re.compile(r"([XYZ])\s*=?\s*([+-]?\d+(?:\.\d+)?)", re.IGNORECASE)
@@ -50,6 +53,287 @@ class Frame:
     dual_head: bool
     segment_count: int
 
+
+class SmartDimensioner:
+    def __init__(self, ax, segments, tolerance=1.0):
+        self.ax = ax
+        self.segments = segments
+        self.tol = tolerance
+        self.shapes = self._extract_shapes()
+
+        # Uniqueness filters
+        self.drawn_values_x = set()
+        self.drawn_values_y = set()
+        self.drawn_diameters = set()
+
+        # COLLISION SYSTEM
+        self.occupied_zones = []
+
+        # 1. Mark shapes as occupied
+        for s in self.shapes:
+            pad = 10
+            self._add_occupied_zone((
+                s['min_x'] - pad, s['min_y'] - pad,
+                s['max_x'] + pad, s['max_y'] + pad
+            ))
+
+        # Global bounds
+        if self.shapes:
+            self.global_min_x = min(s['min_x'] for s in self.shapes)
+            self.global_max_x = max(s['max_x'] for s in self.shapes)
+            self.global_min_y = min(s['min_y'] for s in self.shapes)
+            self.global_max_y = max(s['max_y'] for s in self.shapes)
+        else:
+            self.global_min_x = self.global_max_x = 0
+
+    def _extract_shapes(self):
+        shapes = []
+        current_points = []
+        for seg in self.segments:
+            if seg.style == 'jump':
+                if current_points:
+                    shapes.append(self._get_centroid(current_points))
+                    current_points = []
+            else:
+                for pt in seg.head1: current_points.append(pt)
+                if seg.head2:
+                    for pt in seg.head2: current_points.append(pt)
+        if current_points:
+            shapes.append(self._get_centroid(current_points))
+        return shapes
+
+    def _get_centroid(self, points):
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        width = max_x - min_x
+        height = max_y - min_y
+
+        return {
+            'cx': (min_x + max_x) / 2,
+            'cy': (min_y + max_y) / 2,
+            'min_x': min_x, 'max_x': max_x,
+            'min_y': min_y, 'max_y': max_y,
+            'width': width, 'height': height,
+            # If width ~ height, treat as diameter
+            'diameter': (width + height) / 2 if abs(width - height) < 1.0 else None
+        }
+
+    def _is_overlapping(self, rect):
+        r_x1, r_y1, r_x2, r_y2 = rect
+        r_xmin, r_xmax = min(r_x1, r_x2), max(r_x1, r_x2)
+        r_ymin, r_ymax = min(r_y1, r_y2), max(r_y1, r_y2)
+
+        for (o_x1, o_y1, o_x2, o_y2) in self.occupied_zones:
+            if (r_xmin < o_x2 and r_xmax > o_x1 and r_ymin < o_y2 and r_ymax > o_y1):
+                return True
+        return False
+
+    def _add_occupied_zone(self, rect):
+        r_x1, r_y1, r_x2, r_y2 = rect
+        self.occupied_zones.append((min(r_x1, r_x2), min(r_y1, r_y2), max(r_x1, r_x2), max(r_y1, r_y2)))
+
+    def draw_diameter(self, shape):
+        """Draws a diameter measurement Ø."""
+        if shape['diameter'] is None: return
+
+        val = round(shape['diameter'], 2)
+        if val in self.drawn_diameters: return
+
+        # Formatting
+        text = f"Ø{val:.1f}"
+
+        # Position: Center of shape
+        cx, cy = shape['cx'], shape['cy']
+        radius = shape['diameter'] / 2
+
+        # Try to place it diagonally inside or just outside
+        # For small circles, place slightly above-right
+        offset = radius + 15
+
+        # Check collision for text box
+        text_w = 40
+        text_h = 20
+        # Proposed area: roughly centered on (cx, cy)
+        # We will actually draw a leader line
+
+        # Simplest clean approach: Horizontal line through center + text
+        p1 = (cx - radius, cy)
+        p2 = (cx + radius, cy)
+
+        # Draw arrow across the circle
+        self.ax.annotate('', xy=p1, xytext=p2,
+                         arrowprops=dict(arrowstyle='<->', color='black', lw=0.8))
+
+        # Text label (try to put it inside, if too small put above)
+        if shape['diameter'] > 10000:
+            self.ax.text(cx, cy, text, ha='center', va='center',
+                         color='black', fontsize=7, fontweight='normal',
+                         bbox=dict(boxstyle='square,pad=0.1', fc='white', ec='none', alpha=0.6))
+        else:
+            # Place outside
+            self.ax.text(cx, cy + radius + 10, text, ha='center', va='bottom',
+                         color='black', fontsize=8, fontweight='normal')
+
+        self.drawn_diameters.add(val)
+
+    def draw_arrow(self, p1, p2, label_val, axis='x'):
+        val_str = f"{abs(label_val):.2f}"
+
+        base_offset = 30
+        step_offset = 35
+        max_attempts = 20
+
+        arrow_style = dict(arrowstyle='<->', color='black', lw=0.6, shrinkA=0, shrinkB=0)
+        text_style = dict(ha='center', va='center', fontsize=8, color='black',
+                          bbox=dict(boxstyle='square,pad=0.1', fc='white', ec='none', alpha=0.7))
+        ext_style = dict(color='black', lw=0.5, linestyle=':', alpha=0.4)
+
+        text_height = 20
+
+        if axis == 'x':
+            x_start, x_end = min(p1[0], p2[0]), max(p1[0], p2[0])
+            y_ref = min(p1[1], p2[1])
+
+            for i in range(max_attempts):
+                current_dist = base_offset + (i * step_offset)
+                y_pos = y_ref - current_dist
+
+                proposed_rect = (x_start - 5, y_pos - text_height, x_end + 5, y_pos + 10)
+
+                if not self._is_overlapping(proposed_rect):
+                    self.ax.annotate('', xy=(p1[0], y_pos), xytext=(p2[0], y_pos), arrowprops=arrow_style)
+                    self.ax.text((x_start + x_end) / 2, y_pos, val_str, **text_style)
+                    self.ax.plot([p1[0], p1[0]], [p1[1], y_pos], **ext_style)
+                    self.ax.plot([p2[0], p2[0]], [p2[1], y_pos], **ext_style)
+                    self._add_occupied_zone(proposed_rect)
+                    return
+
+        elif axis == 'y':
+            y_start, y_end = min(p1[1], p2[1]), max(p1[1], p2[1])
+            x_ref = min(p1[0], p2[0])
+
+            for i in range(max_attempts):
+                current_dist = base_offset + (i * step_offset)
+                x_pos = x_ref - current_dist
+
+                proposed_rect = (x_pos - text_height, y_start - 5, x_pos + 10, y_end + 5)
+
+                if not self._is_overlapping(proposed_rect):
+                    self.ax.annotate('', xy=(x_pos, p1[1]), xytext=(x_pos, p2[1]), arrowprops=arrow_style)
+                    self.ax.text(x_pos, (y_start + y_end) / 2, val_str, rotation=90, **text_style)
+                    self.ax.plot([p1[0], x_pos], [p1[1], p1[1]], **ext_style)
+                    self.ax.plot([p2[0], x_pos], [p2[1], p2[1]], **ext_style)
+                    self._add_occupied_zone(proposed_rect)
+                    return
+
+    def _group_by_level(self, shapes, axis='y'):
+        levels = defaultdict(list)
+        key = 'cy' if axis == 'y' else 'cx'
+
+        # Sort by primary axis
+        sorted_shapes = sorted(shapes, key=lambda s: s[key])
+        if not sorted_shapes: return {}
+
+        current_level = sorted_shapes[0][key]
+        levels[current_level].append(sorted_shapes[0])
+
+        for s in sorted_shapes[1:]:
+            if abs(s[key] - current_level) > self.tol:
+                current_level = s[key]
+            levels[current_level].append(s)
+        return levels
+
+    def process(self):
+        if not self.shapes: return
+
+        # --- 0. Diameters ---
+        # Sort by size so we probably label the cleaner ones first
+        for s in sorted(self.shapes, key=lambda x: x['cx']):
+            self.draw_diameter(s)
+
+        # --- 1. Grid Analysis ---
+        rows = self._group_by_level(self.shapes, axis='y')
+        cols = self._group_by_level(self.shapes, axis='x')
+
+        y_levels = sorted(rows.keys())
+        x_levels = sorted(cols.keys())
+
+        # --- 2. Start Offsets (From Edge) ---
+        # X-Offsets: Check the first shape of every Row
+        for y in y_levels:
+            row_shapes = rows[y]
+            leftmost = min(row_shapes, key=lambda s: s['cx'])
+            val = round(leftmost['cx'], 2)
+            if val > 1.0 and val not in self.drawn_values_x:
+                self.draw_arrow((0, leftmost['cy']), (leftmost['cx'], leftmost['cy']),
+                                leftmost['cx'], axis='x')
+                self.drawn_values_x.add(val)
+
+        # Y-Offsets: Check the first shape of every Column
+        for x in x_levels:
+            col_shapes = cols[x]
+            bottommost = min(col_shapes, key=lambda s: s['cy'])
+            val = round(bottommost['cy'], 2)
+            if val > 1.0 and val not in self.drawn_values_y:
+                self.draw_arrow((bottommost['cx'], 0), (bottommost['cx'], bottommost['cy']),
+                                bottommost['cy'], axis='y')
+                self.drawn_values_y.add(val)
+
+        # --- 3. Internal Spacing (Pitch) ---
+
+        # Horizontal Pitch: Iterate through neighbors IN THE SAME ROW
+        for y, row_shapes in rows.items():
+            # Sort shapes left-to-right
+            sorted_row = sorted(row_shapes, key=lambda s: s['cx'])
+            for i in range(len(sorted_row) - 1):
+                s1 = sorted_row[i]
+                s2 = sorted_row[i + 1]
+                val = round(s2['cx'] - s1['cx'], 2)
+
+                # Only draw if unique
+                if val not in self.drawn_values_x:
+                    self.draw_arrow((s1['cx'], s1['cy']), (s2['cx'], s1['cy']), val, axis='x')
+                    self.drawn_values_x.add(val)
+
+        # Vertical Pitch: Iterate through neighbors IN THE SAME COLUMN
+        for x, col_shapes in cols.items():
+            # Sort shapes bottom-to-top
+            sorted_col = sorted(col_shapes, key=lambda s: s['cy'])
+            for i in range(len(sorted_col) - 1):
+                s1 = sorted_col[i]
+                s2 = sorted_col[i + 1]
+                val = round(s2['cy'] - s1['cy'], 2)
+
+                if val not in self.drawn_values_y:
+                    self.draw_arrow((s1['cx'], s1['cy']), (s1['cx'], s2['cy']), val, axis='y')
+                    self.drawn_values_y.add(val)
+
+        # --- 4. Outer Bounds ---
+        safe_min_x = min(z[0] for z in self.occupied_zones)
+        safe_min_y = min(z[1] for z in self.occupied_zones)
+
+        outer_style = dict(arrowstyle='<->', color='black', lw=0.6, shrinkA=0, shrinkB=0)
+        outer_text = dict(ha='center', va='center', fontsize=8, color='black',
+                          bbox=dict(boxstyle='square,pad=0.1', fc='white', ec='none', alpha=0.7))
+
+        # Width
+        y_pos = safe_min_y - 50
+        self.ax.annotate('', xy=(self.global_min_x, y_pos), xytext=(self.global_max_x, y_pos), arrowprops=outer_style)
+        self.ax.text((self.global_min_x + self.global_max_x) / 2, y_pos,
+                     f"{self.global_max_x - self.global_min_x:.0f}", **outer_text)
+
+        # Height
+        x_pos = safe_min_x - 50
+        self.ax.annotate('', xy=(x_pos, self.global_min_y), xytext=(x_pos, self.global_max_y), arrowprops=outer_style)
+        self.ax.text(x_pos, (self.global_min_y + self.global_max_y) / 2,
+                     f"{self.global_max_y - self.global_min_y:.0f}", rotation=90, **outer_text)
+
+
+def add_smart_dimensions(ax, segments):
+    dim = SmartDimensioner(ax, segments)
+    dim.process()
 
 def arc_points(x1: float, y1: float, x2: float, y2: float, sweep_deg: float) -> List[Tuple[float, float]]:
     if abs(sweep_deg) < 1e-9:
@@ -192,7 +476,10 @@ class CNCVisualizer:
             Line2D([0], [0], color="blue", linestyle=":", lw=1),
         ]
 
+        ruler = None
+
         def draw(step: int):
+            nonlocal ruler
             cur_xmin, cur_xmax = ax.get_xlim()
             cur_ymin, cur_ymax = ax.get_ylim()
 
@@ -210,6 +497,10 @@ class CNCVisualizer:
             ax.set_title(f"CNC Visualizer - {self.filename}")
 
             frame = self.frames[int(step)]
+
+            if step == len(self.source_lines):
+                add_smart_dimensions(ax, self.segments[: frame.segment_count])
+
             for seg in self.segments[: frame.segment_count]:
                 xs, ys = zip(*seg.head1)
                 if seg.style == "jump":
@@ -258,6 +549,7 @@ class CNCVisualizer:
 
             ax.legend(legend_lines, ["Head 1 (Cut)", "Head 2 (Cut)", "Rapid Move"], loc="upper right")
             fig.canvas.draw_idle()
+            ruler = Ruler(ax=ax, useblit=True)
 
         def on_key(event):
             step = int(slider.val)
@@ -303,7 +595,7 @@ class CNCVisualizer:
             if seg.head2:
                 xs2, ys2 = zip(*seg.head2)
                 ax.plot(xs2, ys2, "-", color="limegreen", alpha=0.6, linewidth=1.5)
-
+        add_smart_dimensions(ax, self.segments[: frame.segment_count])
         ax.set_xlim(self.xmin, self.xmax)
         ax.set_ylim(self.ymin, self.ymax)
 

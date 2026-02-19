@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>946</width>
+    <height>512</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>CNC Workspace</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout"/>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>946</width>
+     <height>33</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionOpen"/>
+    <addaction name="actionExport"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="actionRedo"/>
+    <addaction name="actionUndo"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QDockWidget" name="CNC_EDITOR">
+   <property name="styleSheet">
+    <string notr="true">QDockWidget &gt; QWidget {
+    border: 0.5px solid black;
+}</string>
+   </property>
+   <property name="features">
+    <set>QDockWidget::DockWidgetFeature::DockWidgetMovable</set>
+   </property>
+   <property name="windowTitle">
+    <string>CNC Editor</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents">
+    <layout class="QGridLayout" name="gridLayout_4">
+     <item row="0" column="0">
+      <layout class="QGridLayout" name="gridLayout_3">
+       <item row="1" column="0">
+        <widget class="QListWidget" name="listWidget">
+         <property name="acceptDrops">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QPushButton" name="pushButton_2">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>40</height>
+          </size>
+         </property>
+         <property name="text">
+          <string> Export CNC</string>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>../../../Downloads/export-content-svgrepo-com.svg</normaloff>../../../Downloads/export-content-svgrepo-com.svg</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>22</width>
+           <height>22</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QPushButton" name="pushButton">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="text">
+          <string> Import Design (DXF, CNC)</string>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>../../../Downloads/drag-right-svgrepo-com.svg</normaloff>../../../Downloads/drag-right-svgrepo-com.svg</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>20</width>
+           <height>20</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QToolBar" name="toolBar">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>LeftToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="separator"/>
+   <addaction name="action_move_up"/>
+   <addaction name="action_move_down"/>
+   <addaction name="separator"/>
+   <addaction name="action_delete"/>
+   <addaction name="separator"/>
+  </widget>
+  <widget class="QToolBar" name="toolBar_2">
+   <property name="windowTitle">
+    <string>toolBar_2</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>LeftToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="action_single_sewing"/>
+   <addaction name="action_parallel_sewing"/>
+   <addaction name="action_mirror_sewing"/>
+  </widget>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open</string>
+   </property>
+  </action>
+  <action name="actionExport">
+   <property name="text">
+    <string>Export</string>
+   </property>
+  </action>
+  <action name="actionCommand_Bar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Tools</string>
+   </property>
+  </action>
+  <action name="actionCNC_Editor">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>CNC Edit</string>
+   </property>
+  </action>
+  <action name="action_move_down">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../../Downloads/down-svgrepo-com.svg</normaloff>../../../Downloads/down-svgrepo-com.svg</iconset>
+   </property>
+   <property name="text">
+    <string>move_down</string>
+   </property>
+   <property name="toolTip">
+    <string>Move Down</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_move_up">
+   <property name="icon">
+    <iconset>
+     <normalon>../../../Downloads/up-svgrepo-com.svg</normalon>
+    </iconset>
+   </property>
+   <property name="text">
+    <string>move_up</string>
+   </property>
+   <property name="toolTip">
+    <string>Move Up</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_single_sewing">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../../Downloads/one-pencil-svgrepo-com.svg</normaloff>
+     <normalon>../../../Downloads/up-svgrepo-com.svg</normalon>../../../Downloads/one-pencil-svgrepo-com.svg</iconset>
+   </property>
+   <property name="text">
+    <string>convert_to_single_head</string>
+   </property>
+   <property name="toolTip">
+    <string>Single Head Sewing For Selected Objects</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_parallel_sewing">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../../Downloads/two-pencil-svgrepo-com.svg</normaloff>
+     <normalon>../../../Downloads/up-svgrepo-com.svg</normalon>../../../Downloads/two-pencil-svgrepo-com.svg</iconset>
+   </property>
+   <property name="text">
+    <string>convert_to_dual_head_parallel</string>
+   </property>
+   <property name="toolTip">
+    <string>Dual Head Parallel Sewing For Selected Objects</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_mirror_sewing">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../../Downloads/mirror-pencil-svgrepo-com.svg</normaloff>
+     <normalon>../../../Downloads/up-svgrepo-com.svg</normalon>../../../Downloads/mirror-pencil-svgrepo-com.svg</iconset>
+   </property>
+   <property name="text">
+    <string>convert_to_dual_head_mirror</string>
+   </property>
+   <property name="toolTip">
+    <string>Dual Head Mirror Sewing For Selected Objects</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_delete">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../../Downloads/delete-svgrepo-com.svg</normaloff>
+     <normalon>../../../Downloads/up-svgrepo-com.svg</normalon>../../../Downloads/delete-svgrepo-com.svg</iconset>
+   </property>
+   <property name="text">
+    <string>delete</string>
+   </property>
+   <property name="toolTip">
+    <string>Delete</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionRedo">
+   <property name="text">
+    <string>Undo</string>
+   </property>
+  </action>
+  <action name="actionUndo">
+   <property name="text">
+    <string>Redo</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

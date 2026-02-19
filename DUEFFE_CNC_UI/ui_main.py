@@ -1,0 +1,212 @@
+# -*- coding: utf-8 -*-
+
+################################################################################
+## Form generated from reading UI file 'maindDINrm.ui'
+##
+## Created by: Qt User Interface Compiler version 6.7.3
+##
+## WARNING! All changes made in this file will be lost when recompiling UI file!
+################################################################################
+
+from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
+    QMetaObject, QObject, QPoint, QRect,
+    QSize, QTime, QUrl, Qt)
+from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
+    QCursor, QFont, QFontDatabase, QGradient,
+    QIcon, QImage, QKeySequence, QLinearGradient,
+    QPainter, QPalette, QPixmap, QRadialGradient,
+    QTransform)
+from PySide6.QtWidgets import (QApplication, QDockWidget, QGridLayout, QListWidget,
+    QListWidgetItem, QMainWindow, QMenu, QMenuBar,
+    QPushButton, QSizePolicy, QStatusBar, QToolBar,
+    QWidget)
+
+class Ui_MainWindow(object):
+    def setupUi(self, MainWindow):
+        if not MainWindow.objectName():
+            MainWindow.setObjectName(u"MainWindow")
+        MainWindow.resize(946, 512)
+        self.actionOpen = QAction(MainWindow)
+        self.actionOpen.setObjectName(u"actionOpen")
+        self.actionExport = QAction(MainWindow)
+        self.actionExport.setObjectName(u"actionExport")
+        self.actionCommand_Bar = QAction(MainWindow)
+        self.actionCommand_Bar.setObjectName(u"actionCommand_Bar")
+        self.actionCommand_Bar.setCheckable(True)
+        self.actionCommand_Bar.setChecked(True)
+        self.actionCNC_Editor = QAction(MainWindow)
+        self.actionCNC_Editor.setObjectName(u"actionCNC_Editor")
+        self.actionCNC_Editor.setCheckable(True)
+        self.actionCNC_Editor.setChecked(True)
+        self.action_move_down = QAction(MainWindow)
+        self.action_move_down.setObjectName(u"action_move_down")
+        icon = QIcon()
+        icon.addFile(u"./icons/down-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        self.action_move_down.setIcon(icon)
+        self.action_move_down.setMenuRole(QAction.MenuRole.NoRole)
+        self.action_move_up = QAction(MainWindow)
+        self.action_move_up.setObjectName(u"action_move_up")
+        icon1 = QIcon()
+        icon1.addFile(u"./icons/up-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.action_move_up.setIcon(icon1)
+        self.action_move_up.setMenuRole(QAction.MenuRole.NoRole)
+        self.action_single_sewing = QAction(MainWindow)
+        self.action_single_sewing.setObjectName(u"action_single_sewing")
+        icon2 = QIcon()
+        icon2.addFile(u"./icons/one-pencil-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon2.addFile(u"./icons/up-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.action_single_sewing.setIcon(icon2)
+        self.action_single_sewing.setMenuRole(QAction.MenuRole.NoRole)
+        self.action_parallel_sewing = QAction(MainWindow)
+        self.action_parallel_sewing.setObjectName(u"action_parallel_sewing")
+        icon3 = QIcon()
+        icon3.addFile(u"./icons/two-pencil-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon3.addFile(u"./icons/up-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.action_parallel_sewing.setIcon(icon3)
+        self.action_parallel_sewing.setMenuRole(QAction.MenuRole.NoRole)
+        self.action_mirror_sewing = QAction(MainWindow)
+        self.action_mirror_sewing.setObjectName(u"action_mirror_sewing")
+        icon4 = QIcon()
+        icon4.addFile(u"./icons/mirror-pencil-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon4.addFile(u"./icons/up-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.action_mirror_sewing.setIcon(icon4)
+        self.action_mirror_sewing.setMenuRole(QAction.MenuRole.NoRole)
+        self.action_delete = QAction(MainWindow)
+        self.action_delete.setObjectName(u"action_delete")
+        icon5 = QIcon()
+        icon5.addFile(u"./icons/delete-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        icon5.addFile(u"./icons/up-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.On)
+        self.action_delete.setIcon(icon5)
+        self.action_delete.setMenuRole(QAction.MenuRole.NoRole)
+        self.actionRedo = QAction(MainWindow)
+        self.actionRedo.setObjectName(u"actionRedo")
+        self.actionUndo = QAction(MainWindow)
+        self.actionUndo.setObjectName(u"actionUndo")
+        self.centralwidget = QWidget(MainWindow)
+        self.centralwidget.setObjectName(u"centralwidget")
+        self.gridLayout = QGridLayout(self.centralwidget)
+        self.gridLayout.setObjectName(u"gridLayout")
+        MainWindow.setCentralWidget(self.centralwidget)
+        self.menubar = QMenuBar(MainWindow)
+        self.menubar.setObjectName(u"menubar")
+        self.menubar.setGeometry(QRect(0, 0, 946, 33))
+        self.menuFile = QMenu(self.menubar)
+        self.menuFile.setObjectName(u"menuFile")
+        self.menuEdit = QMenu(self.menubar)
+        self.menuEdit.setObjectName(u"menuEdit")
+        MainWindow.setMenuBar(self.menubar)
+        self.statusbar = QStatusBar(MainWindow)
+        self.statusbar.setObjectName(u"statusbar")
+        MainWindow.setStatusBar(self.statusbar)
+        self.CNC_EDITOR = QDockWidget(MainWindow)
+        self.CNC_EDITOR.setObjectName(u"CNC_EDITOR")
+        self.CNC_EDITOR.setStyleSheet(u"QDockWidget > QWidget {\n"
+"    border: 0.5px solid black;\n"
+"}")
+        self.CNC_EDITOR.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable)
+        self.dockWidgetContents = QWidget()
+        self.dockWidgetContents.setObjectName(u"dockWidgetContents")
+        self.gridLayout_4 = QGridLayout(self.dockWidgetContents)
+        self.gridLayout_4.setObjectName(u"gridLayout_4")
+        self.gridLayout_3 = QGridLayout()
+        self.gridLayout_3.setObjectName(u"gridLayout_3")
+        self.listWidget = QListWidget(self.dockWidgetContents)
+        self.listWidget.setObjectName(u"listWidget")
+        self.listWidget.setAcceptDrops(True)
+
+        self.gridLayout_3.addWidget(self.listWidget, 1, 0, 1, 1)
+
+        self.pushButton_2 = QPushButton(self.dockWidgetContents)
+        self.pushButton_2.setObjectName(u"pushButton_2")
+        self.pushButton_2.setMinimumSize(QSize(0, 40))
+        icon6 = QIcon()
+        icon6.addFile(u"./icons/export-content-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        self.pushButton_2.setIcon(icon6)
+        self.pushButton_2.setIconSize(QSize(22, 22))
+
+        self.gridLayout_3.addWidget(self.pushButton_2, 2, 0, 1, 1)
+
+        self.pushButton = QPushButton(self.dockWidgetContents)
+        self.pushButton.setObjectName(u"pushButton")
+        self.pushButton.setMinimumSize(QSize(0, 36))
+        icon7 = QIcon()
+        icon7.addFile(u"./icons/drag-right-svgrepo-com.svg", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
+        self.pushButton.setIcon(icon7)
+        self.pushButton.setIconSize(QSize(20, 20))
+
+        self.gridLayout_3.addWidget(self.pushButton, 0, 0, 1, 1)
+
+
+        self.gridLayout_4.addLayout(self.gridLayout_3, 0, 0, 1, 1)
+
+        self.CNC_EDITOR.setWidget(self.dockWidgetContents)
+        MainWindow.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.CNC_EDITOR)
+        self.toolBar = QToolBar(MainWindow)
+        self.toolBar.setObjectName(u"toolBar")
+        MainWindow.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.toolBar)
+        self.toolBar_2 = QToolBar(MainWindow)
+        self.toolBar_2.setObjectName(u"toolBar_2")
+        MainWindow.addToolBar(Qt.ToolBarArea.LeftToolBarArea, self.toolBar_2)
+
+        self.menubar.addAction(self.menuFile.menuAction())
+        self.menubar.addAction(self.menuEdit.menuAction())
+        self.menuFile.addAction(self.actionOpen)
+        self.menuFile.addAction(self.actionExport)
+        self.menuEdit.addAction(self.actionRedo)
+        self.menuEdit.addAction(self.actionUndo)
+        self.toolBar.addSeparator()
+        self.toolBar.addAction(self.action_move_up)
+        self.toolBar.addAction(self.action_move_down)
+        self.toolBar.addSeparator()
+        self.toolBar.addAction(self.action_delete)
+        self.toolBar.addSeparator()
+        self.toolBar_2.addAction(self.action_single_sewing)
+        self.toolBar_2.addAction(self.action_parallel_sewing)
+        self.toolBar_2.addAction(self.action_mirror_sewing)
+
+        self.retranslateUi(MainWindow)
+
+        QMetaObject.connectSlotsByName(MainWindow)
+    # setupUi
+
+    def retranslateUi(self, MainWindow):
+        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"CNC Workspace", None))
+        self.actionOpen.setText(QCoreApplication.translate("MainWindow", u"Open", None))
+        self.actionExport.setText(QCoreApplication.translate("MainWindow", u"Export", None))
+        self.actionCommand_Bar.setText(QCoreApplication.translate("MainWindow", u"Tools", None))
+        self.actionCNC_Editor.setText(QCoreApplication.translate("MainWindow", u"CNC Edit", None))
+        self.action_move_down.setText(QCoreApplication.translate("MainWindow", u"move_down", None))
+#if QT_CONFIG(tooltip)
+        self.action_move_down.setToolTip(QCoreApplication.translate("MainWindow", u"Move Down", None))
+#endif // QT_CONFIG(tooltip)
+        self.action_move_up.setText(QCoreApplication.translate("MainWindow", u"move_up", None))
+#if QT_CONFIG(tooltip)
+        self.action_move_up.setToolTip(QCoreApplication.translate("MainWindow", u"Move Up", None))
+#endif // QT_CONFIG(tooltip)
+        self.action_single_sewing.setText(QCoreApplication.translate("MainWindow", u"convert_to_single_head", None))
+#if QT_CONFIG(tooltip)
+        self.action_single_sewing.setToolTip(QCoreApplication.translate("MainWindow", u"Single Head Sewing For Selected Objects", None))
+#endif // QT_CONFIG(tooltip)
+        self.action_parallel_sewing.setText(QCoreApplication.translate("MainWindow", u"convert_to_dual_head_parallel", None))
+#if QT_CONFIG(tooltip)
+        self.action_parallel_sewing.setToolTip(QCoreApplication.translate("MainWindow", u"Dual Head Parallel Sewing For Selected Objects", None))
+#endif // QT_CONFIG(tooltip)
+        self.action_mirror_sewing.setText(QCoreApplication.translate("MainWindow", u"convert_to_dual_head_mirror", None))
+#if QT_CONFIG(tooltip)
+        self.action_mirror_sewing.setToolTip(QCoreApplication.translate("MainWindow", u"Dual Head Mirror Sewing For Selected Objects", None))
+#endif // QT_CONFIG(tooltip)
+        self.action_delete.setText(QCoreApplication.translate("MainWindow", u"delete", None))
+#if QT_CONFIG(tooltip)
+        self.action_delete.setToolTip(QCoreApplication.translate("MainWindow", u"Delete", None))
+#endif // QT_CONFIG(tooltip)
+        self.actionRedo.setText(QCoreApplication.translate("MainWindow", u"Undo", None))
+        self.actionUndo.setText(QCoreApplication.translate("MainWindow", u"Redo", None))
+        self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
+        self.menuEdit.setTitle(QCoreApplication.translate("MainWindow", u"Edit", None))
+        self.CNC_EDITOR.setWindowTitle(QCoreApplication.translate("MainWindow", u"CNC Editor", None))
+        self.pushButton_2.setText(QCoreApplication.translate("MainWindow", u" Export CNC", None))
+        self.pushButton.setText(QCoreApplication.translate("MainWindow", u" Import Design (DXF, CNC)", None))
+        self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar", None))
+        self.toolBar_2.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar_2", None))
+    # retranslateUi
+
