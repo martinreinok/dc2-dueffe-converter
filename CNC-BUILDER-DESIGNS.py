@@ -485,6 +485,36 @@ def ILVA_160X200_V(version = "V3"):
     )
     return build_bed_program(spec), name
 
+def ILVA_160X190(version = "V6"):
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    ZERO = [15, 15]
+    spec = BedSpec(
+        name=name,
+        rectangles=[
+            RectSpec((0, 0), 1630, 1930, overlap_mm=40, start_offset_y=300),
+            RectSpec((ZERO[0], ZERO[1]), 1600, 1900, overlap_mm=40, start_offset_y=300),
+        ],
+        grid=GridSpec(
+            start=(0, ZERO[1] + 150),
+            dx=0, dy=200,
+            radius=23,
+            snake=True,
+            rows=[
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276, force_single=True),
+                RowSpec(x0=ZERO[0] + 110 + 138, nx=5, dx=276),
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276),
+                RowSpec(x0=ZERO[0] + 110 + 138, nx=5, dx=276),
+                RowSpec(x0=ZERO[0] + 110, nx=6, dx=276),
+            ],
+            nx=0, ny=0,
+        ),
+        second_head_y_offset=800,
+        dual_max_y=None,
+        custom_circle_sweep=-200,
+        custom_second_arc_offset=(0, 0),
+    )
+    return build_bed_program(spec), name
+
 def ILVA_160X200_H(version = "V3"):
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
     ZERO = [15, 15]
@@ -1203,8 +1233,39 @@ def TEST_SCROLLBACK(version = "V2"):
     program_lines.append(end_block())
     return program_lines, name
 
+def NEWYORK_REVB_140(version = "V1"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 10), design_name=f"{inspect.currentframe().f_code.co_name}_{version}"))
+
+    START = (147.5, 0)
+    STEP = 105
+    HEIGHT = 1220
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(0, 0), b=SingleHeadCoordinates(0, HEIGHT)))
+
+    for i in range(14):
+        x = START[0] + STEP * i
+
+        if i % 2 == 0:
+            a = SingleHeadCoordinates(x, HEIGHT)
+            b = SingleHeadCoordinates(x, 0.00)
+        else:
+            a = SingleHeadCoordinates(x, 0.00)
+            b = SingleHeadCoordinates(x, HEIGHT)
+
+        program_lines.append(
+            line_single(state, a=a, b=b)
+        )
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(147.5 + 13*105 + 147.5, HEIGHT), b=SingleHeadCoordinates(147.5 + 13*105 + 147.5, 0)))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
 if __name__ == "__main__":
-    program, name = TEST_SCROLLBACK()
+    program, name = RUTA_120_L()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
