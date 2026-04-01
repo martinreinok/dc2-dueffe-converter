@@ -384,7 +384,8 @@ def line_dual(
     return polyline_dual(state, [a, b], lead_in_mm=lead_mm, lead_out_mm=lead_mm, lift=lift)
 
 
-def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float, second_sweep_deg: float = -270, second_arc_offset=(0, 0), reverse=False, start_top=True) -> str:
+def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float, second_sweep_deg: float = -270, second_arc_offset = (0, 0), reverse=False, start_top=True) -> str:
+
     if start_top:
         start = DualHeadCoordinates(center.x, center.y + radius, center.z + radius)
     else:
@@ -395,6 +396,7 @@ def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float,
     lines: List[str] = []
     lines.extend(ensure_qlyz(state, center.y, center.z))
     lines.append(mr_move_head(start))
+    lines.append(";")
     lines.extend(tool_down_dual(state))
 
     if start_top:
@@ -402,18 +404,13 @@ def circle_dual(state: MachineState, center: DualHeadCoordinates, radius: float,
     else:
         after_first = SingleHeadCoordinates(center.x + radius, center.y)
 
-    lines.append("FREEZE")
-    lines.append(f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}")
-    lines.extend(
-        build_split_arc_commands(
-            center=SingleHeadCoordinates(center.x, center.y),
-            start=after_first,
-            radius=radius,
-            sweep_deg=second_sweep_deg,
-            final_offset=second_arc_offset,
-        )
-    )
+    # Compute correct endpoint for the desired sweep
+    end2 = arc_endpoint_from_sweep(center, after_first, radius, second_sweep_deg)
+
     lines.extend([
+        "FREEZE",
+        f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}",
+        f"ARC X{fmt(end2.x + second_arc_offset[0])}Y{fmt(end2.y + second_arc_offset[1])} a={fmt(second_sweep_deg)}",
         "SYNC",
         "CALL UP1",
     ])
@@ -426,52 +423,12 @@ def reverse_sweep_keep_endpoint(sweep_deg: float) -> float:
         return -360 if sweep_deg > 0 else 360  # full circle case
     return -(1 if sweep_deg > 0 else -1) * (360 - m)
 
-def split_arc_sweep(sweep_deg: float, max_abs_sweep: float = 180.0) -> List[float]:
-    if max_abs_sweep <= 0:
-        raise ValueError("max_abs_sweep must be > 0")
-    if abs(sweep_deg) < 1e-9:
-        return []
-    sign = 1.0 if sweep_deg > 0 else -1.0
-    remaining = abs(sweep_deg)
-    parts: List[float] = []
-    while remaining > max_abs_sweep + 1e-9:
-        parts.append(sign * max_abs_sweep)
-        remaining -= max_abs_sweep
-    if remaining > 1e-9:
-        parts.append(sign * remaining)
-    return parts
-
-def build_split_arc_commands(
-    center: SingleHeadCoordinates,
-    start: SingleHeadCoordinates,
-    radius: float,
-    sweep_deg: float,
-    final_offset: tuple[float, float] = (0.0, 0.0),
-) -> List[str]:
-    commands: List[str] = []
-    parts = split_arc_sweep(sweep_deg)
-    current = start
-
-    for idx, part in enumerate(parts):
-        end = arc_endpoint_from_sweep(center, current, radius, part)
-
-        if idx == len(parts) - 1:
-            end_x = end.x + final_offset[0]
-            end_y = end.y + final_offset[1]
-        else:
-            end_x = end.x
-            end_y = end.y
-
-        commands.append(f"ARC X{fmt(end_x)}Y{fmt(end_y)} a={fmt(part)}")
-        current = end
-
-    return commands
 
 def circle_single(state: MachineState,
                   center: SingleHeadCoordinates,
                   radius: float,
                   second_sweep_deg: float = -270,
-                  second_arc_offset=(0, 0), reverse=False, start_top=True) -> str:
+                  second_arc_offset = (0, 0), reverse=False, start_top=True) -> str:
 
     if start_top:
         start = SingleHeadCoordinates(center.x, center.y + radius)
@@ -483,6 +440,7 @@ def circle_single(state: MachineState,
     lines: List[str] = []
     lines.extend(ensure_qlz(state, start.y))
     lines.append(mr_move_head(start))
+    lines.append(";")
     lines.extend(tool_down_single(state))
 
     if start_top:
@@ -490,18 +448,13 @@ def circle_single(state: MachineState,
     else:
         after_first = SingleHeadCoordinates(center.x + radius, center.y)
 
-    lines.append("FREEZE")
-    lines.append(f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}")
-    lines.extend(
-        build_split_arc_commands(
-            center=center,
-            start=after_first,
-            radius=radius,
-            sweep_deg=second_sweep_deg,
-            final_offset=second_arc_offset,
-        )
-    )
+    # Compute correct endpoint for the desired sweep
+    end2 = arc_endpoint_from_sweep(center, after_first, radius, second_sweep_deg)
+
     lines.extend([
+        "FREEZE",
+        f"ARC X{fmt(after_first.x)}Y{fmt(after_first.y)} a={fmt(first_sweep)}",
+        f"ARC X{fmt(end2.x + second_arc_offset[0])}Y{fmt(end2.y + second_arc_offset[1])} a={fmt(second_sweep_deg)}",
         "SYNC",
         "CALL UP1",
     ])

@@ -1265,7 +1265,7 @@ def NEWYORK_REVB_140(version = "V1"):
     return program_lines, name
 
 if __name__ == "__main__":
-    program, name = RUTA_120_L()
+    program, name = ILVA_160X190()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
