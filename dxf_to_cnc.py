@@ -72,6 +72,14 @@ class GeometryProcessor:
     """Geometry helpers and bulge/vertex conversions used across the pipeline."""
 
     @staticmethod
+    def bounding_box_area(vertices: Sequence[Vertex]) -> float:
+        if not vertices:
+            return 0.0
+        xs = [v[0] for v in vertices]
+        ys = [v[1] for v in vertices]
+        return (max(xs) - min(xs)) * (max(ys) - min(ys))
+
+    @staticmethod
     def squared_distance(a: Point, b: Point) -> float:
         dx = a[0] - b[0]
         dy = a[1] - b[1]
@@ -806,14 +814,14 @@ def extract_polyline_path(entity, *, force_close_tol: float = 0.05) -> PolylineP
 
 
 def dxf_to_cnc_single_polylines(
-    dxf_path: str,
-    *,
-    design_name: str | None = None,
-    include_inserts: bool = True,
-    force_close_tol: float = 0.05,
-    bulge_eps: float = 1e-9,
-    add_semicolon_line: bool = False,
-    optimize_travel: bool = True,
+        dxf_path: str,
+        *,
+        design_name: str | None = None,
+        include_inserts: bool = True,
+        force_close_tol: float = 0.05,
+        bulge_eps: float = 1e-9,
+        add_semicolon_line: bool = False,
+        optimize_travel: bool = True,
 ) -> list[str]:
     parser = DxfParser()
     stitcher = PathStitcher()
@@ -823,7 +831,7 @@ def dxf_to_cnc_single_polylines(
     name = design_name or Path(dxf_path).stem
     state = MachineState()
 
-    program: list[str] = [starting_block(SingleHeadCoordinates(0, 0), name)]
+    program: list[str] = [starting_block(state, SingleHeadCoordinates(0, 0), name)]
 
     paths = parser.parse_file(dxf_path, include_inserts=include_inserts, force_close_tol=force_close_tol)
 
@@ -831,8 +839,41 @@ def dxf_to_cnc_single_polylines(
     paths = stitcher.stitch_connected_paths(paths, tol=0.05, force_close_gaps=True)
     print(f"Stitched continuous paths: {len(paths)}")
 
-    planned = tsp.plan_tsp_order(paths, start_xy=(0.0, 0.0)) if optimize_travel else [(p, p.vertices) for p in paths]
+    planned = []
 
+    if not paths:
+        return program
+
+    if optimize_travel:
+        # 1. Calculate bounding box areas to identify the border
+        paths_with_area = [(p, GeometryProcessor.bounding_box_area(p.vertices)) for p in paths]
+
+        # Sort by area descending so the largest shape (the border) is first
+        paths_with_area.sort(key=lambda x: x[1], reverse=True)
+
+        border_path = paths_with_area[0][0]
+        inner_paths = [p for p, area in paths_with_area[1:]]
+
+        # 2. Optimize the inner paths (waves) first
+        if inner_paths:
+            planned_inner = tsp.plan_tsp_order(inner_paths, start_xy=(0.0, 0.0))
+            planned.extend(planned_inner)
+
+        # 3. Figure out where the tool head is after cutting the waves
+        if planned:
+            _, last_vertices = planned[-1]
+            current_xy = (last_vertices[-1][0], last_vertices[-1][1])
+        else:
+            current_xy = (0.0, 0.0)
+
+        # 4. Choose the most efficient entry point for the border and append it last
+        border_vertices, _, _ = tsp.choose_entry_for_next_path(border_path, current_xy)
+        planned.append((border_path, border_vertices))
+
+    else:
+        planned = [(p, p.vertices) for p in paths]
+
+    # Generate CNC blocks
     for path, chosen_vertices in planned:
         try:
             block = generator.polyline_to_cnc_single(

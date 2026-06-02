@@ -370,6 +370,111 @@ def polyline_dual(
 
     return "\n".join(lines)
 
+def wave_line_single(
+    state: MachineState,
+    a: SingleHeadCoordinates,
+    b: SingleHeadCoordinates,
+    wavelength: float = 50.0,
+    amplitude: float = 7.0,
+    start_cw: bool = True
+) -> str:
+    """
+    Draws a continuous wavy line between point A and B using alternating arcs.
+    """
+    dist = math.hypot(b.x - a.x, b.y - a.y)
+    if dist < 1e-6:
+        return ""
+
+    # Calculate exact half-wave to perfectly fit the distance
+    half_wave = wavelength / 2.0
+    num_half_waves = max(1, int(round(dist / half_wave)))
+    actual_half_wave = dist / num_half_waves
+
+    C = actual_half_wave
+    A = amplitude
+    
+    # Calculate radius and sweep angle for the arc
+    R = ((C / 2)**2 + A**2) / (2 * A)
+    sweep_deg = math.degrees(2 * math.asin((C / 2) / R))
+
+    # Unit vector for the line direction
+    ux = (b.x - a.x) / dist
+    uy = (b.y - a.y) / dist
+
+    lines = []
+    # Rapid move to start
+    lines.append(f"MR X{fmt(a.x)}Y{fmt(a.y)}")
+    lines.append(";")
+    lines.extend(tool_down_single(state))
+
+    current_cw = start_cw
+    
+    # Draw the alternating arcs
+    for i in range(1, num_half_waves + 1):
+        px = a.x + ux * (i * C)
+        py = a.y + uy * (i * C)
+        
+        # CW means negative sweep, CCW means positive sweep
+        sweep = -sweep_deg if current_cw else sweep_deg
+        lines.append(f"ARC X{fmt(px)}Y{fmt(py)} a={fmt(sweep)}")
+        
+        # Alternate direction for the next half-wave
+        current_cw = not current_cw
+
+    # Lift tool
+    lines.append("CALL UP1")
+    return "\n".join(lines)
+
+def wave_line_dual(
+    state: MachineState,
+    a: DualHeadCoordinates,
+    b: DualHeadCoordinates,
+    wavelength: float = 50.0,
+    amplitude: float = 7.0,
+    start_cw: bool = True
+) -> str:
+    """
+    Draws a continuous wavy line between point A and B using dual heads simultaneously.
+    """
+    dist = math.hypot(b.x - a.x, b.y - a.y)
+    if dist < 1e-6:
+        return ""
+
+    half_wave = wavelength / 2.0
+    num_half_waves = max(1, int(round(dist / half_wave)))
+    actual_half_wave = dist / num_half_waves
+
+    C = actual_half_wave
+    A = amplitude
+    
+    R = ((C / 2)**2 + A**2) / (2 * A)
+    sweep_deg = math.degrees(2 * math.asin((C / 2) / R))
+
+    ux = (b.x - a.x) / dist
+    uy = (b.y - a.y) / dist
+
+    lines = []
+    # Set dual head separation and rapid move
+    lines.extend(ensure_qlyz(state, a.y, a.z))
+    lines.append(f"MR X{fmt(a.x)}Y{fmt(a.y)}Z{fmt(a.z)}")
+    lines.append(";")
+    lines.extend(tool_down_dual(state))
+
+    current_cw = start_cw
+    
+    # Draw the alternating arcs
+    for i in range(1, num_half_waves + 1):
+        px = a.x + ux * (i * C)
+        py = a.y + uy * (i * C)
+        
+        sweep = -sweep_deg if current_cw else sweep_deg
+        # ARC automatically tracks both heads based on the QLYZ offset
+        lines.append(f"ARC X{fmt(px)}Y{fmt(py)} a={fmt(sweep)}")
+        
+        current_cw = not current_cw
+
+    lines.append("CALL UP1")
+    return "\n".join(lines)
 
 def line_dual(
     state: MachineState,

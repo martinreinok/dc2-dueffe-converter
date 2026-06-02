@@ -1,6 +1,6 @@
 # main_demo.py
 import inspect
-import ezdxf
+# import ezdxf
 import math
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
@@ -16,7 +16,8 @@ from dueffe_cnc_builder import (
     circle_single,
     circle_dual,
     line_single,
-    line_dual,
+    wave_line_single,
+    wave_line_dual,
     polyline_single,
     polyline_dual,
     emit_program,
@@ -1264,10 +1265,60 @@ def NEWYORK_REVB_140(version = "V1"):
     program_lines.append(end_block())
     return program_lines, name
 
+def CARPEDIEM_WAVE_90(version = "V2"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    
+    # 1. Outer Border
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(-15, -15), design_name=name))
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(-15, -15), width=2030, height=930, overlap_mm=40))
+
+    # 2. Bottom-Left Corner (Head is already near here from the rectangle)
+    program_lines.append(line_single(state, SingleHeadCoordinates(0, 0), SingleHeadCoordinates(125, 150), lead_mm=0))
+
+    # 3. First Dual Wave (Left to Right)
+    # Head is at 125,150. Cuts perfectly into the start of the wave.
+    program_lines.append(wave_line_dual(state, a=DualHeadCoordinates(125, 150, 600), b=DualHeadCoordinates(1875, 150, 600), wavelength=50, amplitude=7, start_cw=True))
+    
+    # 4. Bottom-Right Corner (Weave it in while the head is at 1875,150)
+    program_lines.append(line_single(state, SingleHeadCoordinates(1875, 150), SingleHeadCoordinates(2000, 0), lead_mm=0))
+    
+    # 5. Remaining Horizontal Waves (Snaking back up)
+    program_lines.append(wave_line_dual(state, a=DualHeadCoordinates(1875, 300, 750), b=DualHeadCoordinates(125, 300, 750), wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(wave_line_single(state, a=SingleHeadCoordinates(125, 450), b=SingleHeadCoordinates(1875, 450), wavelength=50, amplitude=7, start_cw=True))
+
+    # 6. Top-Right Corner (Head finished at 1875,450. Jump to TR corner and cut inwards)
+    program_lines.append(line_single(state, SingleHeadCoordinates(2000, 900), SingleHeadCoordinates(1875, 750), lead_mm=0))
+
+    # 7. Vertical Waves (Reversed to go Right-to-Left)
+    # Because we cut inwards from the TR corner, the head is exactly at 1875,750 ready to go down.
+    x_vals_reversed = [1875, 1625, 1375, 1125, 875, 625, 375, 125]
+    for i, x in enumerate(x_vals_reversed):
+        if i % 2 == 0:
+            # Top to Bottom
+            a = SingleHeadCoordinates(x, 750)
+            b = SingleHeadCoordinates(x, 150)
+        else:
+            # Bottom to Top
+            a = SingleHeadCoordinates(x, 150)
+            b = SingleHeadCoordinates(x, 750)
+
+        # Notice cw=True is constant, matching your original visual phase logic
+        program_lines.append(wave_line_single(state, a, b, wavelength=50, amplitude=7, start_cw=True))
+
+    # 8. Top-Left Corner 
+    # The final vertical wave (X=125) moves Bottom->Top, placing the head exactly at 125,750!
+    program_lines.append(line_single(state, SingleHeadCoordinates(125, 750), SingleHeadCoordinates(0, 900), lead_mm=0))
+
+    program_lines.append(end_block())
+    return program_lines, name
+
+
 if __name__ == "__main__":
-    program, name = ILVA_160X190()
+    program, name = CARPEDIEM_WAVE_90()
     model_name = name.rsplit("_", 1)[0]
     cnc = emit_program(program, crlf=False)
     save_program(cnc, f"outputs/{model_name}/{name}.CNC", crlf=True)
-    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC", margin=250, show_graph=True)
+    x_max, y_max = show_interactive(f"outputs/{model_name}/{name}.CNC", margin=200, show_graph=True)
     save_vrp(f"outputs/{model_name}/{name}.CNC", name, int(x_max), int(y_max))
