@@ -249,7 +249,7 @@ def main() -> None:
 
     out_path = args.output
     if out_path is None:
-        out_path = in_path.with_name(in_path.stem + "_FLIP_V2" + in_path.suffix)
+        out_path = in_path.with_name(in_path.stem + "_FLIP" + in_path.suffix)
 
     y_min, y_max = flip_file(in_path, out_path, args.y_min, args.y_max)
     print(f"Flipped vertically using Ymin={y_min:g}, Ymax={y_max:g}")

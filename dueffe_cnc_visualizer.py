@@ -55,83 +55,69 @@ class Frame:
 
 
 class SmartDimensioner:
-    def __init__(self, ax, segments, tolerance=2.0):
+    def __init__(self, ax, segments, tolerance=2.0, detail_level=1):
         self.ax = ax
         self.segments = segments
-        self.tol = tolerance
-        
-        # Uniqueness filters applied globally per axis
-        self.drawn_values_x = set()
-        self.drawn_values_y = set()
-        self.drawn_diameters = set()
-        
-        # Collision System
+        self.detail_level = detail_level
+        # Higher detail level reduces tolerance, capturing finer grid steps
+        self.tol = tolerance if detail_level > 1 else max(tolerance, 10.0)
+
         self.occupied_zones = []
-        self.shapes = self._extract_shapes()
+        self.global_min_x = self.global_max_x = self.global_min_y = self.global_max_y = 0
 
-        # Mark physical shapes as occupied to push text outwards
-        for s in self.shapes:
-            pad = 10
-            self._add_occupied_zone((
-                s['min_x'] - pad, s['min_y'] - pad,
-                s['max_x'] + pad, s['max_y'] + pad
-            ))
+        self._calculate_bounds()
 
-        # Global physical bounds
-        if self.shapes:
-            self.global_min_x = min(s['min_x'] for s in self.shapes)
-            self.global_max_x = max(s['max_x'] for s in self.shapes)
-            self.global_min_y = min(s['min_y'] for s in self.shapes)
-            self.global_max_y = max(s['max_y'] for s in self.shapes)
-        else:
-            self.global_min_x = self.global_max_x = self.global_min_y = self.global_max_y = 0
+        # Extract the structural grid of the design instead of closed shapes
+        self.x_levels = self._extract_grid('x')
+        self.y_levels = self._extract_grid('y')
 
-    def _extract_shapes(self):
-        shapes = []
-        curr_h1 = []
-        curr_h2 = []
-        
-        # Explicitly separate Head 1 and Head 2 so dual cuts aren't merged
+    def _calculate_bounds(self):
+        xs, ys = [], []
         for seg in self.segments:
-            if seg.style == 'jump':
-                if curr_h1:
-                    shapes.append(self._analyze_shape(curr_h1))
-                    curr_h1 = []
-                if curr_h2:
-                    shapes.append(self._analyze_shape(curr_h2))
-                    curr_h2 = []
+            for pts in (seg.head1, seg.head2):
+                for px, py in pts:
+                    xs.append(px)
+                    ys.append(py)
+
+        if xs:
+            self.global_min_x, self.global_max_x = min(xs), max(xs)
+            self.global_min_y, self.global_max_y = min(ys), max(ys)
+            # Reserve the physical object area so dimensions are pushed outward
+            self._add_occupied_zone((self.global_min_x - 5, self.global_min_y - 5,
+                                     self.global_max_x + 5, self.global_max_y + 5))
+
+    def _extract_grid(self, axis):
+        raw_vals = set()
+        for seg in self.segments:
+            # Only use cutting moves to define the internal grid (ignore jumps)
+            if seg.style == 'cut':
+                for pts in (seg.head1, seg.head2):
+                    for p in pts:
+                        raw_vals.add(round(p[0] if axis == 'x' else p[1], 1))
+
+        if not raw_vals: return []
+
+        # Always lock the absolute outer bounds into the grid
+        if axis == 'x':
+            raw_vals.update([round(self.global_min_x, 1), round(self.global_max_x, 1)])
+        else:
+            raw_vals.update([round(self.global_min_y, 1), round(self.global_max_y, 1)])
+
+        sorted_vals = sorted(list(raw_vals))
+
+        # Cluster coordinates that are extremely close to remove micro-stutters
+        clustered = [sorted_vals[0]]
+        for val in sorted_vals[1:]:
+            if val - clustered[-1] > self.tol:
+                clustered.append(val)
             else:
-                curr_h1.extend(seg.head1)
-                if seg.head2:
-                    curr_h2.extend(seg.head2)
-        
-        if curr_h1: shapes.append(self._analyze_shape(curr_h1))
-        if curr_h2: shapes.append(self._analyze_shape(curr_h2))
-        return shapes
+                clustered[-1] = (clustered[-1] + val) / 2.0
 
-    def _analyze_shape(self, points):
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        w, h = max_x - min_x, max_y - min_y
+        return clustered
 
-        shape_type = 'unknown'
-        if w > h * 2 and w > 10:
-            shape_type = 'horizontal'
-        elif h > w * 2 and h > 10:
-            shape_type = 'vertical'
-        elif abs(w - h) <= 5.0 and w < 100 and h < 100:
-            shape_type = 'circle'
-        elif w > 100 and h > 100:
-            shape_type = 'boundary'
-
-        return {
-            'cx': (min_x + max_x) / 2, 'cy': (min_y + max_y) / 2,
-            'min_x': min_x, 'max_x': max_x, 'min_y': min_y, 'max_y': max_y,
-            'width': w, 'height': h, 'type': shape_type,
-            'diameter': (w + h) / 2 if shape_type == 'circle' else None
-        }
+    def _add_occupied_zone(self, rect):
+        r_x1, r_y1, r_x2, r_y2 = rect
+        self.occupied_zones.append((min(r_x1, r_x2), min(r_y1, r_y2), max(r_x1, r_x2), max(r_y1, r_y2)))
 
     def _is_overlapping(self, rect):
         r_x1, r_y1, r_x2, r_y2 = rect
@@ -143,163 +129,123 @@ class SmartDimensioner:
                 return True
         return False
 
-    def _add_occupied_zone(self, rect):
-        r_x1, r_y1, r_x2, r_y2 = rect
-        self.occupied_zones.append((min(r_x1, r_x2), min(r_y1, r_y2), max(r_x1, r_x2), max(r_y1, r_y2)))
+    def draw_chain(self, levels, axis):
+        if len(levels) < 2: return
 
-    def draw_diameter(self, shape):
-        if shape['diameter'] is None: return
-
-        val = round(shape['diameter'], 2)
-        if val in self.drawn_diameters: return
-
-        text = f"Ø{val:.1f}"
-        cx, cy = shape['cx'], shape['cy']
-        radius = shape['diameter'] / 2
-
-        self.ax.annotate('', xy=(cx - radius, cy), xytext=(cx + radius, cy), 
-                         arrowprops=dict(arrowstyle='<->', color='black', lw=0.8))
-        self.ax.text(cx, cy + radius + 10, text, ha='center', va='bottom', color='black', fontsize=8)
-        self.drawn_diameters.add(val)
-
-    def draw_dynamic_dim(self, p1, p2, label_val, axis='x'):
-        val_rounded = round(abs(label_val), 2)
-        if val_rounded < 1.0: return
-        
-        # Global uniqueness check per axis
-        drawn_set = self.drawn_values_x if axis == 'x' else self.drawn_values_y
-        if val_rounded in drawn_set:
-            return
-            
-        val_str = f"{val_rounded:.2f}"
-
-        base_offset = 30
-        step_offset = 35
-        max_attempts = 50
-
-        # Switch to architectural ticks for tight gaps
-        dist = abs(p2[0] - p1[0]) if axis == 'x' else abs(p2[1] - p1[1])
-        arrow_style = dict(arrowstyle='|-|' if dist < 25 else '<->', color='black', lw=0.6, shrinkA=0, shrinkB=0)
-        text_style = dict(ha='center', va='center', fontsize=8, color='black',
+        text_style = dict(ha='center', va='center', fontsize=7, color='black',
                           bbox=dict(boxstyle='square,pad=0.1', fc='white', ec='none', alpha=0.8))
         ext_style = dict(color='black', lw=0.4, linestyle=':', alpha=0.5)
 
-        gap = 4 # Visual gap from the object
+        base_offset = 40
+        step_offset = 80
 
         if axis == 'x':
-            x_start, x_end = min(p1[0], p2[0]), max(p1[0], p2[0])
-            y_ref = min(p1[1], p2[1])
+            y_ref = self.global_min_y
+            for i in range(20):
+                y_pos = y_ref - base_offset - (i * step_offset)
+                rect = (levels[0], y_pos - 10, levels[-1], y_pos + 10)
 
-            for i in range(max_attempts):
-                y_pos = y_ref - (base_offset + (i * step_offset))
-                proposed_rect = (x_start - 10, y_pos - 10, x_end + 10, y_pos + 10)
+                if not self._is_overlapping(rect):
+                    self._add_occupied_zone(rect)
+                    # Main continuous dimension line
+                    self.ax.plot([levels[0], levels[-1]], [y_pos, y_pos], color='black', lw=0.6)
 
-                if not self._is_overlapping(proposed_rect):
-                    self.ax.annotate('', xy=(p1[0], y_pos), xytext=(p2[0], y_pos), arrowprops=arrow_style)
-                    self.ax.text((x_start + x_end) / 2, y_pos, val_str, **text_style)
-                    
-                    ext_y1 = p1[1] - gap if y_pos < p1[1] else p1[1] + gap
-                    self.ax.plot([p1[0], p1[0]], [ext_y1, y_pos], **ext_style)
-                    self.ax.plot([p2[0], p2[0]], [ext_y1, y_pos], **ext_style)
-                    
-                    self._add_occupied_zone(proposed_rect)
-                    drawn_set.add(val_rounded)
+                    for j in range(len(levels) - 1):
+                        x1, x2 = levels[j], levels[j + 1]
+                        val = round(x2 - x1, 2)
+
+                        if val < 1.0: continue
+
+                        # Architectural tick marks
+                        self.ax.plot([x1, x1], [y_pos - 3, y_pos + 3], color='black', lw=0.8)
+                        self.ax.plot([x2, x2], [y_pos - 3, y_pos + 3], color='black', lw=0.8)
+
+                        # Extension lines pointing to the grid
+                        self.ax.plot([x1, x1], [self.global_min_y, y_pos], **ext_style)
+                        self.ax.plot([x2, x2], [self.global_min_y, y_pos], **ext_style)
+
+                        self.ax.text((x1 + x2) / 2, y_pos, f"{val:.1f}", **text_style)
                     return
 
         elif axis == 'y':
-            y_start, y_end = min(p1[1], p2[1]), max(p1[1], p2[1])
-            x_ref = min(p1[0], p2[0])
+            x_ref = self.global_min_x
+            for i in range(20):
+                x_pos = x_ref - base_offset - (i * step_offset)
+                rect = (x_pos - 10, levels[0], x_pos + 10, levels[-1])
 
-            for i in range(max_attempts):
-                x_pos = x_ref - (base_offset + (i * step_offset))
-                proposed_rect = (x_pos - 10, y_start - 10, x_pos + 10, y_end + 10)
+                if not self._is_overlapping(rect):
+                    self._add_occupied_zone(rect)
+                    self.ax.plot([x_pos, x_pos], [levels[0], levels[-1]], color='black', lw=0.6)
 
-                if not self._is_overlapping(proposed_rect):
-                    self.ax.annotate('', xy=(x_pos, p1[1]), xytext=(x_pos, p2[1]), arrowprops=arrow_style)
-                    self.ax.text(x_pos, (y_start + y_end) / 2, val_str, rotation=90, **text_style)
-                    
-                    ext_x1 = p1[0] - gap if x_pos < p1[0] else p1[0] + gap
-                    self.ax.plot([ext_x1, x_pos], [p1[1], p1[1]], **ext_style)
-                    self.ax.plot([ext_x1, x_pos], [p2[1], p2[1]], **ext_style)
-                    
-                    self._add_occupied_zone(proposed_rect)
-                    drawn_set.add(val_rounded)
+                    for j in range(len(levels) - 1):
+                        y1, y2 = levels[j], levels[j + 1]
+                        val = round(y2 - y1, 2)
+
+                        if val < 1.0: continue
+
+                        self.ax.plot([x_pos - 3, x_pos + 3], [y1, y1], color='black', lw=0.8)
+                        self.ax.plot([x_pos - 3, x_pos + 3], [y2, y2], color='black', lw=0.8)
+
+                        self.ax.plot([self.global_min_x, x_pos], [y1, y1], **ext_style)
+                        self.ax.plot([self.global_min_x, x_pos], [y2, y2], **ext_style)
+
+                        self.ax.text(x_pos, (y1 + y2) / 2, f"{val:.1f}", rotation=90, **text_style)
                     return
 
-    def get_unique_levels(self, lines, key):
-        if not lines: return []
-        levels = []
-        sorted_lines = sorted(lines, key=lambda s: s[key])
-        
-        current_level = sorted_lines[0][key]
-        levels.append(current_level)
-        
-        for s in sorted_lines[1:]:
-            if abs(s[key] - current_level) > self.tol:
-                current_level = s[key]
-                levels.append(current_level)
-        return levels
+    def draw_overall(self, p1, p2, axis):
+        val = round(abs(p2[0] - p1[0]) if axis == 'x' else abs(p2[1] - p1[1]), 2)
+        if val < 1.0: return
+
+        text_style = dict(ha='center', va='center', fontsize=8, color='black', weight='bold',
+                          bbox=dict(boxstyle='square,pad=0.1', fc='white', ec='none', alpha=0.9))
+        ext_style = dict(color='black', lw=0.4, linestyle=':', alpha=0.5)
+        arrow_style = dict(arrowstyle='<->', color='black', lw=0.8)
+
+        base_offset = 40
+        step_offset = 80
+
+        if axis == 'x':
+            y_ref = self.global_min_y
+            for i in range(20):
+                y_pos = y_ref - base_offset - (i * step_offset)
+                rect = (p1[0] - 10, y_pos - 10, p2[0] + 10, y_pos + 10)
+                if not self._is_overlapping(rect):
+                    self._add_occupied_zone(rect)
+                    self.ax.annotate('', xy=(p1[0], y_pos), xytext=(p2[0], y_pos), arrowprops=arrow_style)
+                    self.ax.text((p1[0] + p2[0]) / 2, y_pos, f"{val:.1f}", **text_style)
+                    self.ax.plot([p1[0], p1[0]], [self.global_min_y, y_pos], **ext_style)
+                    self.ax.plot([p2[0], p2[0]], [self.global_min_y, y_pos], **ext_style)
+                    return
+        else:
+            x_ref = self.global_min_x
+            for i in range(20):
+                x_pos = x_ref - base_offset - (i * step_offset)
+                rect = (x_pos - 10, p1[1] - 10, x_pos + 10, p2[1] + 10)
+                if not self._is_overlapping(rect):
+                    self._add_occupied_zone(rect)
+                    self.ax.annotate('', xy=(x_pos, p1[1]), xytext=(x_pos, p2[1]), arrowprops=arrow_style)
+                    self.ax.text(x_pos, (p1[1] + p2[1]) / 2, f"{val:.1f}", rotation=90, **text_style)
+                    self.ax.plot([self.global_min_x, x_pos], [p1[1], p1[1]], **ext_style)
+                    self.ax.plot([self.global_min_x, x_pos], [p2[1], p2[1]], **ext_style)
+                    return
 
     def process(self):
-        if not self.shapes: return
+        if self.global_max_x - self.global_min_x < 1: return
 
-        h_lines = [s for s in self.shapes if s['type'] == 'horizontal']
-        v_lines = [s for s in self.shapes if s['type'] == 'vertical']
-        circles = [s for s in self.shapes if s['type'] == 'circle']
-        boundaries = [s for s in self.shapes if s['type'] == 'boundary']
-        
-        main_boundary = max(boundaries, key=lambda s: s['width'] * s['height']) if boundaries else None
+        # 1. Pitch Chains (Inner Grid Details)
+        if self.detail_level >= 1:
+            if len(self.x_levels) > 2:
+                self.draw_chain(self.x_levels, 'x')
+            if len(self.y_levels) > 2:
+                self.draw_chain(self.y_levels, 'y')
 
-        for c in circles:
-            self.draw_diameter(c)
-
-        y_levels = self.get_unique_levels(h_lines, 'cy')
-        x_levels = self.get_unique_levels(v_lines, 'cx')
-
-        # 1. PITCHES (Inner-most dimensions)
-        for i in range(len(y_levels) - 1):
-            pitch = y_levels[i+1] - y_levels[i]
-            self.draw_dynamic_dim((self.global_min_x, y_levels[i]), (self.global_min_x, y_levels[i+1]), pitch, axis='y')
-
-        for i in range(len(x_levels) - 1):
-            pitch = x_levels[i+1] - x_levels[i]
-            self.draw_dynamic_dim((x_levels[i], self.global_min_y), (x_levels[i+1], self.global_min_y), pitch, axis='x')
-
-        # 2. MARGINS (Distance from outer boundary to grid)
-        if main_boundary:
-            b = main_boundary
-            if y_levels:
-                bot_margin = y_levels[0] - b['min_y']
-                self.draw_dynamic_dim((b['min_x'], b['min_y']), (b['min_x'], y_levels[0]), bot_margin, axis='y')
-                
-                top_margin = b['max_y'] - y_levels[-1]
-                self.draw_dynamic_dim((b['min_x'], y_levels[-1]), (b['min_x'], b['max_y']), top_margin, axis='y')
-
-            if x_levels:
-                left_margin = x_levels[0] - b['min_x']
-                self.draw_dynamic_dim((b['min_x'], b['min_y']), (x_levels[0], b['min_y']), left_margin, axis='x')
-                
-                right_margin = b['max_x'] - x_levels[-1]
-                self.draw_dynamic_dim((x_levels[-1], b['min_y']), (b['max_x'], b['min_y']), right_margin, axis='x')
-
-        # 3. SHAPE LENGTHS (Physical size of the grid)
-        if h_lines:
-            longest_h = max(h_lines, key=lambda s: s['width'])
-            self.draw_dynamic_dim((longest_h['min_x'], self.global_min_y), (longest_h['max_x'], self.global_min_y), longest_h['width'], axis='x')
-        
-        if v_lines:
-            longest_v = max(v_lines, key=lambda s: s['height'])
-            self.draw_dynamic_dim((self.global_min_x, longest_v['min_y']), (self.global_min_x, longest_v['max_y']), longest_v['height'], axis='y')
-
-        # 4. OVERALL BOUNDS (Furthest out, wrapping everything else)
-        w = self.global_max_x - self.global_min_x
-        h = self.global_max_y - self.global_min_y
-        self.draw_dynamic_dim((self.global_min_x, self.global_min_y), (self.global_max_x, self.global_min_y), w, axis='x')
-        self.draw_dynamic_dim((self.global_min_x, self.global_min_y), (self.global_min_x, self.global_max_y), h, axis='y')
+        # 2. Overall bounds (Outer Wrap)
+        self.draw_overall((self.global_min_x, self.global_min_y), (self.global_max_x, self.global_min_y), 'x')
+        self.draw_overall((self.global_min_x, self.global_min_y), (self.global_min_x, self.global_max_y), 'y')
 
 
-def add_smart_dimensions(ax, segments):
-    dim = SmartDimensioner(ax, segments)
+def add_smart_dimensions(ax, segments, detail_level=3):
+    dim = SmartDimensioner(ax, segments, detail_level=detail_level)
     dim.process()
 
 def arc_points(x1: float, y1: float, x2: float, y2: float, sweep_deg: float) -> List[Tuple[float, float]]:
@@ -425,9 +371,17 @@ class CNCVisualizer:
 
     def show(self):
         fig, ax = plt.subplots(figsize=(14, 9))
-        plt.subplots_adjust(bottom=0.15)
 
-        slider_ax = plt.axes([0.15, 0.05, 0.7, 0.03])
+        # Make the main plot area occupy more of the window
+        fig.subplots_adjust(
+            left=0.04,
+            right=0.98,
+            top=0.95,
+            bottom=0.10
+        )
+
+        # Move the slider lower so it uses less plot space
+        slider_ax = fig.add_axes([0.15, 0.03, 0.7, 0.03])
         slider = Slider(
             slider_ax,
             "Line",
@@ -601,3 +555,11 @@ def show_interactive(filename, save_drawing: bool = True, margin: float = None, 
 
 if __name__ == "__main__":
     main()
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_080_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_090_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_105_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_120_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_140_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_160_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_180_V_FLIP.CNC", show_graph=False)
+    # show_interactive(R"D:\Clients\Hilding Anders Baltic\P-WALL\FLIP/PWALL_210_V_FLIP.CNC", show_graph=False)

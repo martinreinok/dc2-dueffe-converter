@@ -239,62 +239,41 @@ def polyline_single(
     points: Sequence[SingleHeadCoordinates],
     lead_in_mm: float = 0.0,
     lead_out_mm: float = 0.0,
-    lift: bool = True,
+    drop_tool: bool = True,
+    lift_tool: bool = True,
     add_semicolon_line: bool = True,
 ) -> str:
     """
-    MI-only polyline, KNAPP-style.
-
-    - Rapid to an optional lead-in point (slightly "inside" the first vertex)
-    - Tool down (DW11, with ELY only if switching mode)
-    - MI through all vertices
-    - Optional lead-out (slightly "inside" the last vertex)
-    - Optional UP1
-
-    This produces sequences like:
-      MR X...Y...        (lead-in)
-      ;
-      CALL ELY
-      CALL DW11
-      MI Xp0Yp0
-      MI Xp1Yp1
-      ...
-      MI X(last-inset)Y(last-inset)
-      CALL UP1
+    MI-only polyline. Can be chained continuously by setting drop_tool=False and lift_tool=False.
     """
     if len(points) < 2:
         raise ValueError("polyline_single needs at least 2 points")
 
-    p0, p1 = points[0], points[1]
-    ux0, uy0 = _unit_vec(p0.x, p0.y, p1.x, p1.y)
-
-    # lead-in point is "inside" from p0 towards p1
-    start_x = p0.x + ux0 * lead_in_mm
-    start_y = p0.y + uy0 * lead_in_mm
-
-    pn_1, pn = points[-2], points[-1]
-    uxn, uyn = _unit_vec(pn_1.x, pn_1.y, pn.x, pn.y)
-
-    # lead-out point is "inside" from pn back toward pn_1 (i.e., reverse of last segment)
-    end_x = pn.x - uxn * lead_out_mm
-    end_y = pn.y - uyn * lead_out_mm
-
     lines: List[str] = []
-    lines.append(_mr_xy(start_x, start_y))
-    if add_semicolon_line:
-        lines.append(";")
-    lines.extend(tool_down_single(state))
-
-    # cut back to the true first vertex, then along the chain
+    p0, p1 = points[0], points[1]
+    
+    if drop_tool:
+        ux0, uy0 = _unit_vec(p0.x, p0.y, p1.x, p1.y)
+        start_x = p0.x + ux0 * lead_in_mm
+        start_y = p0.y + uy0 * lead_in_mm
+        
+        lines.append(_mr_xy(start_x, start_y))
+        if add_semicolon_line:
+            lines.append(";")
+        lines.extend(tool_down_single(state))
+        
+    # Cut to the true first vertex, then along the chain
     lines.append(_mi_xy(p0.x, p0.y))
     for p in points[1:]:
         lines.append(_mi_xy(p.x, p.y))
 
-    # lead-out/backoff
-    if lead_out_mm > 0:
-        lines.append(_mi_xy(end_x, end_y))
-
-    if lift:
+    if lift_tool:
+        if lead_out_mm > 0:
+            pn_1, pn = points[-2], points[-1]
+            uxn, uyn = _unit_vec(pn_1.x, pn_1.y, pn.x, pn.y)
+            end_x = pn.x - uxn * lead_out_mm
+            end_y = pn.y - uyn * lead_out_mm
+            lines.append(_mi_xy(end_x, end_y))
         lines.append("CALL UP1")
 
     return "\n".join(lines)
@@ -305,13 +284,17 @@ def line_single(
     a: SingleHeadCoordinates,
     b: SingleHeadCoordinates,
     lead_mm: float = 10.0,
-    lift: bool = True,
+    drop_tool: bool = True,
+    lift_tool: bool = True,
 ) -> str:
     """
-    Single straight line, KNAPP-style:
-      start inside A by lead_mm, cut back to A, to B, back inside by lead_mm, UP1.
+    Single straight line, now supports continuous chaining.
     """
-    return polyline_single(state, [a, b], lead_in_mm=lead_mm, lead_out_mm=lead_mm, lift=lift)
+    return polyline_single(
+        state, [a, b], 
+        lead_in_mm=lead_mm, lead_out_mm=lead_mm, 
+        drop_tool=drop_tool, lift_tool=lift_tool
+    )
 
 
 def polyline_dual(
@@ -376,16 +359,18 @@ def wave_line_single(
     b: SingleHeadCoordinates,
     wavelength: float = 50.0,
     amplitude: float = 7.0,
-    start_cw: bool = True
+    start_cw: bool = True,
+    lead_mm: float = 2.0,
+    drop_tool: bool = True,
+    lift_tool: bool = True
 ) -> str:
     """
-    Draws a continuous wavy line between point A and B using alternating arcs.
+    Draws a continuous wavy line. Can be chained by skipping tool drops/lifts.
     """
     dist = math.hypot(b.x - a.x, b.y - a.y)
     if dist < 1e-6:
         return ""
 
-    # Calculate exact half-wave to perfectly fit the distance
     half_wave = wavelength / 2.0
     num_half_waves = max(1, int(round(dist / half_wave)))
     actual_half_wave = dist / num_half_waves
@@ -393,36 +378,54 @@ def wave_line_single(
     C = actual_half_wave
     A = amplitude
     
-    # Calculate radius and sweep angle for the arc
     R = ((C / 2)**2 + A**2) / (2 * A)
     sweep_deg = math.degrees(2 * math.asin((C / 2) / R))
 
-    # Unit vector for the line direction
     ux = (b.x - a.x) / dist
     uy = (b.y - a.y) / dist
 
     lines = []
-    # Rapid move to start
-    lines.append(f"MR X{fmt(a.x)}Y{fmt(a.y)}")
-    lines.append(";")
-    lines.extend(tool_down_single(state))
+    
+    if drop_tool:
+        start_x = a.x - ux * lead_mm
+        start_y = a.y - uy * lead_mm
+        
+        if state.head_mode == "dual":
+            lines.append("CALL FLZ")
+            state.head_mode = "none"
+            state.last_qlz = None
+            
+        if state.last_qlz != start_y:
+            lines.append(f"CALL QLY {fmt(start_y)}")
+            state.last_qlz = start_y
+            state.last_qlyz = None
+
+        lines.append(f"MR X{fmt(start_x)}Y{fmt(start_y)}")
+        lines.append(";")
+        lines.extend(tool_down_single(state))
+        
+        # Linear lead-in
+        lines.append(f"MI X{fmt(a.x)}Y{fmt(a.y)}")
+        
+    lines.append("FREEZE")
 
     current_cw = start_cw
-    
-    # Draw the alternating arcs
     for i in range(1, num_half_waves + 1):
         px = a.x + ux * (i * C)
         py = a.y + uy * (i * C)
-        
-        # CW means negative sweep, CCW means positive sweep
         sweep = -sweep_deg if current_cw else sweep_deg
         lines.append(f"ARC X{fmt(px)}Y{fmt(py)} a={fmt(sweep)}")
-        
-        # Alternate direction for the next half-wave
         current_cw = not current_cw
 
-    # Lift tool
-    lines.append("CALL UP1")
+    lines.append("SYNC")
+    
+    if lift_tool:
+        if lead_mm > 0:
+            end_x = b.x + ux * lead_mm
+            end_y = b.y + uy * lead_mm
+            lines.append(f"MI X{fmt(end_x)}Y{fmt(end_y)}")
+        lines.append("CALL UP1")
+
     return "\n".join(lines)
 
 def wave_line_dual(
@@ -431,10 +434,12 @@ def wave_line_dual(
     b: DualHeadCoordinates,
     wavelength: float = 50.0,
     amplitude: float = 7.0,
-    start_cw: bool = True
+    start_cw: bool = True,
+    lead_mm: float = 2.0
 ) -> str:
     """
     Draws a continuous wavy line between point A and B using dual heads simultaneously.
+    Includes proper controller lead-in/out and FREEZE/SYNC wrappers.
     """
     dist = math.hypot(b.x - a.x, b.y - a.y)
     if dist < 1e-6:
@@ -453,16 +458,33 @@ def wave_line_dual(
     ux = (b.x - a.x) / dist
     uy = (b.y - a.y) / dist
 
+    # Calculate safe lead-in and lead-out points
+    start_x = a.x - ux * lead_mm
+    start_y = a.y - uy * lead_mm
+    end_x = b.x + ux * lead_mm
+    end_y = b.y + uy * lead_mm
+    
+    # Maintain the proper Z distance offset for the dual heads during lead-in
+    z_offset = a.z - a.y
+    start_z = start_y + z_offset
+
     lines = []
-    # Set dual head separation and rapid move
-    lines.extend(ensure_qlyz(state, a.y, a.z))
-    lines.append(f"MR X{fmt(a.x)}Y{fmt(a.y)}Z{fmt(a.z)}")
+    
+    # 1. Set dual head separation and rapid move to lead-in point
+    lines.extend(ensure_qlyz(state, start_y, start_z))
+    lines.append(f"MR X{fmt(start_x)}Y{fmt(start_y)}Z{fmt(start_z)}")
     lines.append(";")
+    
+    # 2. Tool down
     lines.extend(tool_down_dual(state))
+
+    # 3. Linear lead-in and start buffering
+    lines.append(f"MI X{fmt(a.x)}Y{fmt(a.y)}")
+    lines.append("FREEZE")
 
     current_cw = start_cw
     
-    # Draw the alternating arcs
+    # 4. Draw the alternating arcs
     for i in range(1, num_half_waves + 1):
         px = a.x + ux * (i * C)
         py = a.y + uy * (i * C)
@@ -473,6 +495,12 @@ def wave_line_dual(
         
         current_cw = not current_cw
 
+    # 5. Execute buffer and linear lead-out
+    lines.append("SYNC")
+    if lead_mm > 0:
+        lines.append(f"MI X{fmt(end_x)}Y{fmt(end_y)}")
+
+    # 6. Retract tool
     lines.append("CALL UP1")
     return "\n".join(lines)
 

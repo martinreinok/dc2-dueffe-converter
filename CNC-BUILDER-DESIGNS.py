@@ -420,6 +420,25 @@ def CIRCLE_45MM(version = "V1"):
     program_lines.append(end_block())
     return program_lines, name
 
+def VERTICAL_LINE_1175(version="V1"):
+    state = MachineState()
+    name = f"{inspect.currentframe().f_code.co_name}_{version}"
+    program_lines: List[str] = []
+    
+    # Initialize the program
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(0, 0), design_name=name))
+
+    # Draw the vertical line (from Y=0 to Y=1175)
+    program_lines.append(line_single(
+        state, 
+        a=SingleHeadCoordinates(0, 0), 
+        b=SingleHeadCoordinates(0, 1175)
+    ))
+
+    # End the program
+    program_lines.append(end_block())
+    return program_lines, name
+
 def ILVA_80X190_SINGLE(version = "V3"):
     state = MachineState()
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
@@ -1265,51 +1284,44 @@ def NEWYORK_REVB_140(version = "V1"):
     program_lines.append(end_block())
     return program_lines, name
 
-def CARPEDIEM_WAVE_90(version = "V2"):
+def CARPEDIEM_WAVE_90(version = "V6"):
     state = MachineState()
     name = f"{inspect.currentframe().f_code.co_name}_{version}"
     program_lines: List[str] = []
-    
-    # 1. Outer Border
-    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(-15, -15), design_name=name))
-    program_lines.append(rectangle(state, start=SingleHeadCoordinates(-15, -15), width=2030, height=930, overlap_mm=40))
 
-    # 2. Bottom-Left Corner (Head is already near here from the rectangle)
-    program_lines.append(line_single(state, SingleHeadCoordinates(0, 0), SingleHeadCoordinates(125, 150), lead_mm=0))
+    # Outer rectangle 
+    program_lines.append(starting_block(state, initial_coordinates=SingleHeadCoordinates(-30, -30), design_name=name))
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(-30, -30), width=960, height=2060, overlap_mm=40))
 
-    # 3. First Dual Wave (Left to Right)
-    # Head is at 125,150. Cuts perfectly into the start of the wave.
-    program_lines.append(wave_line_dual(state, a=DualHeadCoordinates(125, 150, 600), b=DualHeadCoordinates(1875, 150, 600), wavelength=50, amplitude=7, start_cw=True))
-    
-    # 4. Bottom-Right Corner (Weave it in while the head is at 1875,150)
-    program_lines.append(line_single(state, SingleHeadCoordinates(1875, 150), SingleHeadCoordinates(2000, 0), lead_mm=0))
-    
-    # 5. Remaining Horizontal Waves (Snaking back up)
-    program_lines.append(wave_line_dual(state, a=DualHeadCoordinates(1875, 300, 750), b=DualHeadCoordinates(125, 300, 750), wavelength=50, amplitude=7, start_cw=True))
-    program_lines.append(wave_line_single(state, a=SingleHeadCoordinates(125, 450), b=SingleHeadCoordinates(1875, 450), wavelength=50, amplitude=7, start_cw=True))
+    # Inner rectangle
+    program_lines.append(rectangle(state, start=SingleHeadCoordinates(-15, -15), width=930, height=2030, overlap_mm=40))
 
-    # 6. Top-Right Corner (Head finished at 1875,450. Jump to TR corner and cut inwards)
-    program_lines.append(line_single(state, SingleHeadCoordinates(2000, 900), SingleHeadCoordinates(1875, 750), lead_mm=0))
+    # Wavy rectangle
+    program_lines.append(line_single(state, SingleHeadCoordinates(0, 0), SingleHeadCoordinates(150, 125), lead_mm=0, drop_tool=True, lift_tool=False))
+    program_lines.append(wave_line_single(state, SingleHeadCoordinates(150, 125), SingleHeadCoordinates(150, 1875), wavelength=50, amplitude=7, start_cw=True, drop_tool=False, lift_tool=False))
+    program_lines.append(polyline_single(state, [SingleHeadCoordinates(150, 1875), SingleHeadCoordinates(0, 2000), SingleHeadCoordinates(150, 1875)], drop_tool=False, lift_tool=False))
 
-    # 7. Vertical Waves (Reversed to go Right-to-Left)
-    # Because we cut inwards from the TR corner, the head is exactly at 1875,750 ready to go down.
-    x_vals_reversed = [1875, 1625, 1375, 1125, 875, 625, 375, 125]
-    for i, x in enumerate(x_vals_reversed):
-        if i % 2 == 0:
-            # Top to Bottom
-            a = SingleHeadCoordinates(x, 750)
-            b = SingleHeadCoordinates(x, 150)
-        else:
-            # Bottom to Top
-            a = SingleHeadCoordinates(x, 150)
-            b = SingleHeadCoordinates(x, 750)
 
-        # Notice cw=True is constant, matching your original visual phase logic
-        program_lines.append(wave_line_single(state, a, b, wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(150, 1875), b=SingleHeadCoordinates(750, 1875), drop_tool=False, lift_tool=False))
+    # program_lines.append(wave_line_single(state, SingleHeadCoordinates(150, 1875), SingleHeadCoordinates(750, 1875), wavelength=50, amplitude=7, start_cw=True, drop_tool=False, lift_tool=False))
 
-    # 8. Top-Left Corner 
-    # The final vertical wave (X=125) moves Bottom->Top, placing the head exactly at 125,750!
-    program_lines.append(line_single(state, SingleHeadCoordinates(125, 750), SingleHeadCoordinates(0, 900), lead_mm=0))
+
+    program_lines.append(polyline_single(state, [SingleHeadCoordinates(750, 1875), SingleHeadCoordinates(900, 2000), SingleHeadCoordinates(750, 1875)], drop_tool=False, lift_tool=False))
+    program_lines.append(wave_line_single(state, SingleHeadCoordinates(750, 1875), SingleHeadCoordinates(750, 125), wavelength=50, amplitude=7, start_cw=True, drop_tool=False, lift_tool=False))
+    program_lines.append(polyline_single(state, [SingleHeadCoordinates(750, 125), SingleHeadCoordinates(900, 0), SingleHeadCoordinates(750, 125)], drop_tool=False, lift_tool=False))
+
+
+    program_lines.append(line_single(state, a=SingleHeadCoordinates(750, 125), b=SingleHeadCoordinates(150, 125), drop_tool=False, lift_tool=True))
+    # program_lines.append(wave_line_single(state, SingleHeadCoordinates(750, 125), SingleHeadCoordinates(150, 125), wavelength=50, amplitude=7, start_cw=True, drop_tool=False, lift_tool=True))
+
+
+    program_lines.append(wave_line_single(state, SingleHeadCoordinates(300, 125), SingleHeadCoordinates(300, 1875), wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(wave_line_single(state, SingleHeadCoordinates(450, 1875), SingleHeadCoordinates(450, 125), wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(wave_line_single(state, SingleHeadCoordinates(600, 125), SingleHeadCoordinates(600, 1875), wavelength=50, amplitude=7, start_cw=True))
+
+    program_lines.append(wave_line_dual(state, DualHeadCoordinates(750, 1125 - 250 * 1, 1625), DualHeadCoordinates(150, 1125 - 250 * 1, 1625), wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(wave_line_dual(state, DualHeadCoordinates(150, 1125 - 250 * 2, 1375), DualHeadCoordinates(750, 1125 - 250 * 2, 1375), wavelength=50, amplitude=7, start_cw=True))
+    program_lines.append(wave_line_dual(state, DualHeadCoordinates(750, 1125 - 250 * 3, 1125), DualHeadCoordinates(150, 1125 - 250 * 3, 1125), wavelength=50, amplitude=7, start_cw=True))
 
     program_lines.append(end_block())
     return program_lines, name
